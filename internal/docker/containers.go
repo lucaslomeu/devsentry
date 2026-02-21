@@ -36,14 +36,14 @@ func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
 
 	if err := cmd.Run(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			return nil, fmt.Errorf("docker nao encontrado no PATH")
+			return nil, fmt.Errorf("docker not found in PATH")
 		}
 
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("falha ao executar docker ps: %s", msg)
+		return nil, fmt.Errorf("failed to run docker ps: %s", msg)
 	}
 
 	results := make([]ContainerInfo, 0)
@@ -58,7 +58,7 @@ func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
 
 		var row dockerPSRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, fmt.Errorf("linha %d invalida no docker ps: %w", lineNum, err)
+			return nil, fmt.Errorf("invalid line %d in docker ps: %w", lineNum, err)
 		}
 
 		results = append(results, ContainerInfo{
@@ -69,7 +69,7 @@ func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
 		})
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("erro lendo saida do docker ps: %w", err)
+		return nil, fmt.Errorf("error reading docker ps output: %w", err)
 	}
 
 	return results, nil

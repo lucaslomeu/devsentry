@@ -11,7 +11,7 @@ var rootCmd = &cobra.Command{
 	Short: "Devsentry CLI",
 	Long:  "Devsentry is a command-line interface tool for managing and monitoring development environments.",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(cmd.OutOrStdout(), "Bem-vindo ao devsentry!")
+		fmt.Fprintln(cmd.OutOrStdout(), "Welcome to devsentry!")
 	},
 }
 
@@ -20,6 +20,7 @@ func init() {
 	rootCmd.AddCommand(dockerCmd)
 	rootCmd.AddCommand(lsCmd)
 	rootCmd.AddCommand(summaryCmd)
+	rootCmd.AddCommand(statusCmd)
 }
 
 // Execute runs the root command.
