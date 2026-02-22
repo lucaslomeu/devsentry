@@ -10,4 +10,5 @@ var dockerCmd = &cobra.Command{
 func init() {
 	dockerCmd.AddCommand(dockerLsCmd)
 	dockerCmd.AddCommand(dockerSummaryCmd)
+	dockerCmd.AddCommand(dockerTopCmd)
 }
