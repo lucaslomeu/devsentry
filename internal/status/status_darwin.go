@@ -389,15 +389,15 @@ func parseLoadAvg(line string) (float64, float64, float64, error) {
 		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
 	}
 
-	load1, err := strconv.ParseFloat(parts[0], 64)
+	load1, err := strconv.ParseFloat(strings.ReplaceAll(parts[0], ",", "."), 64)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
 	}
-	load5, err := strconv.ParseFloat(parts[1], 64)
+	load5, err := strconv.ParseFloat(strings.ReplaceAll(parts[1], ",", "."), 64)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
 	}
-	load15, err := strconv.ParseFloat(parts[2], 64)
+	load15, err := strconv.ParseFloat(strings.ReplaceAll(parts[2], ",", "."), 64)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
 	}
