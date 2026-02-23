@@ -25,8 +25,21 @@ type dockerPSRow struct {
 	Ports  string `json:"Ports"`
 }
 
-// ListRunningContainers returns running Docker containers using `docker ps`.
 func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
+	output, err := runDockerPS(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := parseDockerPSOutput(output)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse docker ps output: %w", err)
+	}
+
+	return results, nil
+}
+
+func runDockerPS(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "docker", "ps", "--format", "{{json .}}")
 
 	var out bytes.Buffer
@@ -36,19 +49,24 @@ func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
 
 	if err := cmd.Run(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			return nil, fmt.Errorf("docker not found in PATH")
+			return "", fmt.Errorf("docker not found in PATH")
 		}
 
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("failed to run docker ps: %s", msg)
+		return "", fmt.Errorf("failed to run docker ps: %s", msg)
 	}
 
+	return out.String(), nil
+}
+
+func parseDockerPSOutput(output string) ([]ContainerInfo, error) {
 	results := make([]ContainerInfo, 0)
-	scanner := bufio.NewScanner(&out)
+	scanner := bufio.NewScanner(strings.NewReader(output))
 	lineNum := 0
+
 	for scanner.Scan() {
 		lineNum++
 		line := strings.TrimSpace(scanner.Text())
