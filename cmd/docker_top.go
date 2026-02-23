@@ -17,13 +17,6 @@ var dockerTopCmd = &cobra.Command{
 	RunE:  runDockerTop,
 }
 
-var topCmd = &cobra.Command{
-	Use:    "top",
-	Short:  "Alias for devsentry docker top",
-	Hidden: true,
-	RunE:   runDockerTop,
-}
-
 func runDockerTop(cmd *cobra.Command, args []string) error {
 	result, err := docker.GetTop(cmd.Context(), docker.TopOptions{
 		IncludeAnonymousVolumes: dockerTopAll,

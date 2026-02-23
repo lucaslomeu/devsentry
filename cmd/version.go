@@ -12,7 +12,9 @@ var Version = "0.1.0"
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show the devsentry version",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintln(cmd.OutOrStdout(), Version)
-	},
+	Run:   runVersionCmd,
+}
+
+func runVersionCmd(cmd *cobra.Command, args []string) {
+	fmt.Fprintln(cmd.OutOrStdout(), "devsentry version:", Version)
 }

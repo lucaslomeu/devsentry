@@ -15,13 +15,6 @@ var dockerLsCmd = &cobra.Command{
 	RunE:  runDockerLs,
 }
 
-var lsCmd = &cobra.Command{
-	Use:    "ls",
-	Short:  "Alias for devsentry docker ls",
-	Hidden: true,
-	RunE:   runDockerLs,
-}
-
 func runDockerLs(cmd *cobra.Command, args []string) error {
 	containers, err := docker.ListRunningContainers(cmd.Context())
 	if err != nil {

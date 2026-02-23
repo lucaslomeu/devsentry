@@ -14,13 +14,6 @@ var dockerSummaryCmd = &cobra.Command{
 	RunE:  runDockerSummary,
 }
 
-var summaryCmd = &cobra.Command{
-	Use:    "summary",
-	Short:  "Alias for devsentry docker summary",
-	Hidden: true,
-	RunE:   runDockerSummary,
-}
-
 func runDockerSummary(cmd *cobra.Command, args []string) error {
 	summary, err := docker.GetSummary(cmd.Context())
 	if err != nil {
