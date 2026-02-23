@@ -16,10 +16,12 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(dockerCmd)
 	rootCmd.AddCommand(lsCmd)
 	rootCmd.AddCommand(summaryCmd)
+	rootCmd.AddCommand(topCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(cleanCmd)
 }
