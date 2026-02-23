@@ -21,6 +21,7 @@ func init() {
 	rootCmd.AddCommand(lsCmd)
 	rootCmd.AddCommand(summaryCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(cleanCmd)
 }
 
 // Execute runs the root command.
