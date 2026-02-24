@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"devsentry/internal/clean"
 
@@ -9,15 +10,19 @@ import (
 )
 
 var cleanApply bool
+var cleanTimeout time.Duration
 
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean up Docker resources",
-	RunE: runCleanCmd,
+	RunE:  runCleanCmd,
 }
 
 func runCleanCmd(cmd *cobra.Command, args []string) error {
-	plan, err := clean.BuildPlan(cmd.Context())
+	opts := clean.Options{
+		Timeout: cleanTimeout,
+	}
+	plan, err := clean.BuildPlan(cmd.Context(), opts)
 	if err != nil {
 		return err
 	}
@@ -87,7 +92,7 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if err := clean.Apply(cmd.Context()); err != nil {
+	if err := clean.Apply(cmd.Context(), opts); err != nil {
 		return err
 	}
 
@@ -97,6 +102,7 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 
 func init() {
 	cleanCmd.Flags().BoolVar(&cleanApply, "apply", false, "Execute the cleanup commands")
+	cleanCmd.Flags().DurationVar(&cleanTimeout, "timeout", 60*time.Second, "Timeout for Docker commands")
 }
 
 func formatBytes(bytes uint64) string {

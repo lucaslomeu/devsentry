@@ -12,7 +12,11 @@ import (
 	"time"
 )
 
-const cleanTimeout = 5 * time.Second
+const defaultCleanTimeout = 60 * time.Second
+
+type Options struct {
+	Timeout time.Duration
+}
 
 type Plan struct {
 	DanglingImages    []ImageItem
@@ -55,22 +59,24 @@ type containerRow struct {
 }
 
 // BuildPlan collects the items that would be cleaned and estimates reclaimable space.
-func BuildPlan(ctx context.Context) (Plan, error) {
+func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 	if err := ensureDockerCLI(); err != nil {
 		return Plan{}, err
 	}
 
-	images, imagesTotal, err := listDanglingImages(ctx)
+	timeout := normalizeTimeout(opts.Timeout)
+
+	images, imagesTotal, err := listDanglingImages(ctx, timeout)
 	if err != nil {
 		return Plan{}, err
 	}
 
-	containers, containersTotal, err := listStoppedContainers(ctx)
+	containers, containersTotal, err := listStoppedContainers(ctx, timeout)
 	if err != nil {
 		return Plan{}, err
 	}
 
-	buildCache, err := getBuildCacheEstimate(ctx)
+	buildCache, err := getBuildCacheEstimate(ctx, timeout)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -103,26 +109,28 @@ func BuildPlan(ctx context.Context) (Plan, error) {
 }
 
 // Apply executes the cleanup commands.
-func Apply(ctx context.Context) error {
+func Apply(ctx context.Context, opts Options) error {
 	if err := ensureDockerCLI(); err != nil {
 		return err
 	}
 
-	if _, err := runDockerCommand(ctx, "image", "prune", "-f"); err != nil {
+	timeout := normalizeTimeout(opts.Timeout)
+
+	if _, err := runDockerCommand(ctx, timeout, "image", "prune", "-f"); err != nil {
 		return err
 	}
-	if _, err := runDockerCommand(ctx, "container", "prune", "-f"); err != nil {
+	if _, err := runDockerCommand(ctx, timeout, "container", "prune", "-f"); err != nil {
 		return err
 	}
-	if _, err := runDockerCommand(ctx, "builder", "prune", "-f"); err != nil {
+	if _, err := runDockerCommand(ctx, timeout, "builder", "prune", "-f"); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func listDanglingImages(ctx context.Context) ([]ImageItem, uint64, error) {
-	out, err := runDockerCommand(ctx, "image", "ls", "-f", "dangling=true", "--format", "{{json .}}")
+func listDanglingImages(ctx context.Context, timeout time.Duration) ([]ImageItem, uint64, error) {
+	out, err := runDockerCommand(ctx, timeout, "image", "ls", "-f", "dangling=true", "--format", "{{json .}}")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -158,8 +166,8 @@ func listDanglingImages(ctx context.Context) ([]ImageItem, uint64, error) {
 	return items, total, nil
 }
 
-func listStoppedContainers(ctx context.Context) ([]ContainerItem, uint64, error) {
-	out, err := runDockerCommand(ctx, "ps", "-a", "--filter", "status=exited", "--filter", "status=dead", "--size", "--format", "{{json .}}")
+func listStoppedContainers(ctx context.Context, timeout time.Duration) ([]ContainerItem, uint64, error) {
+	out, err := runDockerCommand(ctx, timeout, "ps", "-a", "--filter", "status=exited", "--filter", "status=dead", "--size", "--format", "{{json .}}")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -196,8 +204,8 @@ func listStoppedContainers(ctx context.Context) ([]ContainerItem, uint64, error)
 	return items, total, nil
 }
 
-func getBuildCacheEstimate(ctx context.Context) (BuildCacheInfo, error) {
-	out, err := runDockerCommand(ctx, "builder", "prune", "--dry-run", "--force")
+func getBuildCacheEstimate(ctx context.Context, timeout time.Duration) (BuildCacheInfo, error) {
+	out, err := runDockerCommand(ctx, timeout, "builder", "prune", "--dry-run", "--force")
 	if err == nil {
 		sizeLabel, sizeBytes := parseReclaimedSpace(out)
 		if sizeLabel != "" {
@@ -207,14 +215,14 @@ func getBuildCacheEstimate(ctx context.Context) (BuildCacheInfo, error) {
 	}
 
 	if isUnsupportedDryRun(err) {
-		return getBuildCacheFromSystemDF(ctx)
+		return getBuildCacheFromSystemDF(ctx, timeout)
 	}
 
 	return BuildCacheInfo{}, err
 }
 
-func getBuildCacheFromSystemDF(ctx context.Context) (BuildCacheInfo, error) {
-	out, err := runDockerCommand(ctx, "system", "df", "--format", "{{json .}}")
+func getBuildCacheFromSystemDF(ctx context.Context, timeout time.Duration) (BuildCacheInfo, error) {
+	out, err := runDockerCommand(ctx, timeout, "system", "df", "--format", "{{json .}}")
 	if err != nil {
 		return BuildCacheInfo{}, err
 	}
@@ -378,8 +386,8 @@ func isUnsupportedDryRun(err error) bool {
 	return strings.Contains(msg, "unknown flag: --dry-run") || strings.Contains(msg, "unknown flag --dry-run")
 }
 
-func runDockerCommand(ctx context.Context, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, cleanTimeout)
+func runDockerCommand(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
@@ -394,7 +402,7 @@ func runDockerCommand(ctx context.Context, args ...string) (string, error) {
 			return "", fmt.Errorf("docker not found in PATH")
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", fmt.Errorf("docker command timed out after %s", cleanTimeout)
+			return "", fmt.Errorf("docker command timed out after %s", timeout)
 		}
 
 		msg := strings.TrimSpace(stderr.String())
@@ -405,4 +413,11 @@ func runDockerCommand(ctx context.Context, args ...string) (string, error) {
 	}
 
 	return out.String(), nil
+}
+
+func normalizeTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return defaultCleanTimeout
+	}
+	return timeout
 }
