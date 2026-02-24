@@ -27,4 +27,4 @@ release:
   prerelease: auto
 
 changelog:
-  skip: true
+  disable: true
