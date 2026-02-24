@@ -7,7 +7,8 @@ import (
 )
 
 // Version is the current devsentry CLI version.
-var Version = "0.1.0"
+// Overridden at build time via -ldflags.
+var Version = "dev"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
