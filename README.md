@@ -4,13 +4,21 @@ Devsentry is a CLI to inspect Docker resources and basic environment status.
 
 ## Installation
 
+Release binaries (macOS arm64/amd64) are published on GitHub Releases.
+
 Local build:
 
 ```bash
-go build ./...
+go build -o devsentry .
 ```
 
-Local run:
+Install locally (optional):
+
+```bash
+sudo mv devsentry /usr/local/bin/
+```
+
+Local run (development):
 
 ```bash
 go run .
@@ -30,8 +38,3 @@ go run .
 - `devsentry docker top` — top images and volumes by size (`--all` includes anonymous volumes).
 - `devsentry clean` — dry-run cleanup of dangling images, stopped containers, and build cache (`--apply` to execute).
 - `devsentry status` — show local environment status.
-
-Aliases:
-
-- `devsentry ls`
-- `devsentry summary`
