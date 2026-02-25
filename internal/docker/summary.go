@@ -68,12 +68,12 @@ func GetSummary(ctx context.Context) (Summary, error) {
 func parseDockerInfo(output string) (int, int, error) {
 	trimmed := strings.TrimSpace(output)
 	if trimmed == "" {
-		return 0, 0, fmt.Errorf("docker info returned empty")
+		return 0, 0, fmt.Errorf("docker: info returned empty")
 	}
 
 	var row dockerInfoRow
 	if err := json.Unmarshal([]byte(trimmed), &row); err != nil {
-		return 0, 0, fmt.Errorf("invalid docker info JSON: %w", err)
+		return 0, 0, fmt.Errorf("docker: invalid info JSON: %w", err)
 	}
 
 	return row.ContainersRunning, row.ContainersStopped, nil
@@ -98,13 +98,13 @@ func parseSystemDF(output string) (int, string, int, string, int, string, error)
 
 		var row systemDFRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return 0, "", 0, "", 0, "", fmt.Errorf("invalid line %d in docker system df: %w", lineNum, err)
+			return 0, "", 0, "", 0, "", fmt.Errorf("docker: invalid system df line %d: %w", lineNum, err)
 		}
 
 		countStr := strings.TrimSpace(row.TotalCount)
 		count, err := strconv.Atoi(countStr)
 		if err != nil {
-			return 0, "", 0, "", 0, "", fmt.Errorf("invalid TotalCount on line %d: %w", lineNum, err)
+			return 0, "", 0, "", 0, "", fmt.Errorf("docker: invalid system df total count on line %d: %w", lineNum, err)
 		}
 
 		switch row.Type {
@@ -120,7 +120,7 @@ func parseSystemDF(output string) (int, string, int, string, int, string, error)
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return 0, "", 0, "", 0, "", fmt.Errorf("error reading docker system df output: %w", err)
+		return 0, "", 0, "", 0, "", fmt.Errorf("docker: error reading system df output: %w", err)
 	}
 
 	return images, imagesSize, volumes, volumesSize, buildCache, buildCacheSize, nil

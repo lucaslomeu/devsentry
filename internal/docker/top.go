@@ -87,13 +87,13 @@ func topImages(ctx context.Context) ([]TopItem, error) {
 
 		var row dockerImageRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, fmt.Errorf("invalid line %d in docker image ls: %w", lineNum, err)
+			return nil, fmt.Errorf("docker: invalid line %d in docker image ls: %w", lineNum, err)
 		}
 
 		name := imageDisplayName(row)
 		sizeBytes, err := parseSizeToBytes(row.Size)
 		if err != nil {
-			return nil, fmt.Errorf("invalid image size on line %d: %w", lineNum, err)
+			return nil, fmt.Errorf("docker: invalid image size on line %d: %w", lineNum, err)
 		}
 
 		items = append(items, TopItem{
@@ -127,7 +127,7 @@ func topVolumes(ctx context.Context, opts TopOptions) ([]TopItem, error) {
 
 		var row dockerVolumeRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, fmt.Errorf("invalid line %d in docker volume ls: %w", lineNum, err)
+			return nil, fmt.Errorf("docker: invalid line %d in docker volume ls: %w", lineNum, err)
 		}
 
 		if row.Name == "" {
@@ -164,7 +164,7 @@ func topVolumes(ctx context.Context, opts TopOptions) ([]TopItem, error) {
 
 		var row dockerVolumeInspect
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, fmt.Errorf("invalid line %d in docker volume inspect: %w", lineNum, err)
+			return nil, fmt.Errorf("docker: invalid line %d in docker volume inspect: %w", lineNum, err)
 		}
 
 		if row.Name == "" {
@@ -357,7 +357,7 @@ func topVolumesFromSystemDF(ctx context.Context, volumeNames []string, opts TopO
 
 		var row dockerSystemDFRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, fmt.Errorf("invalid line %d in docker system df: %w", lineNum, err)
+			return nil, fmt.Errorf("docker: invalid line %d in docker system df: %w", lineNum, err)
 		}
 
 		if row.Type != "Local Volumes" && row.Type != "Volumes" {
@@ -372,7 +372,7 @@ func topVolumesFromSystemDF(ctx context.Context, volumeNames []string, opts TopO
 
 		sizeBytes, err := parseSizeToBytes(row.Size)
 		if err != nil {
-			return nil, fmt.Errorf("invalid volume size on line %d: %w", lineNum, err)
+			return nil, fmt.Errorf("docker: invalid volume size on line %d: %w", lineNum, err)
 		}
 
 		items = append(items, TopItem{

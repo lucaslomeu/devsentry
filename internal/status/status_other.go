@@ -9,5 +9,5 @@ import (
 
 func GetStatus(ctx context.Context, _ Options) (Status, error) {
 	_ = ctx
-	return Status{}, fmt.Errorf("status is not supported on this system")
+	return Status{}, fmt.Errorf("status: not supported on this system")
 }

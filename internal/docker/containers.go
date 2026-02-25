@@ -30,7 +30,7 @@ func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
 
 	results, err := parseDockerPSOutput(output)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse docker ps output: %w", err)
+		return nil, fmt.Errorf("docker: failed to parse docker ps output: %w", err)
 	}
 
 	return results, nil

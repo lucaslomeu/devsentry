@@ -138,12 +138,12 @@ func listDanglingImages(ctx context.Context, timeout time.Duration) ([]ImageItem
 
 		var row imageRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, 0, fmt.Errorf("invalid line %d in docker image ls: %w", lineNum, err)
+			return nil, 0, fmt.Errorf("clean: invalid line %d in docker image ls: %w", lineNum, err)
 		}
 
 		sizeBytes, err := parseSizeToBytes(row.Size)
 		if err != nil {
-			return nil, 0, fmt.Errorf("invalid image size on line %d: %w", lineNum, err)
+			return nil, 0, fmt.Errorf("clean: invalid image size on line %d: %w", lineNum, err)
 		}
 
 		items = append(items, ImageItem{
@@ -175,12 +175,12 @@ func listStoppedContainers(ctx context.Context, timeout time.Duration) ([]Contai
 
 		var row containerRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, 0, fmt.Errorf("invalid line %d in docker ps: %w", lineNum, err)
+			return nil, 0, fmt.Errorf("clean: invalid line %d in docker ps: %w", lineNum, err)
 		}
 
 		sizeBytes, sizeLabel, err := parseContainerSize(row.Size)
 		if err != nil {
-			return nil, 0, fmt.Errorf("invalid container size on line %d: %w", lineNum, err)
+			return nil, 0, fmt.Errorf("clean: invalid container size on line %d: %w", lineNum, err)
 		}
 
 		items = append(items, ContainerItem{
@@ -231,7 +231,7 @@ func getBuildCacheFromSystemDF(ctx context.Context, timeout time.Duration) (Buil
 			Size string `json:"Size"`
 		}
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return BuildCacheInfo{}, fmt.Errorf("invalid line %d in docker system df: %w", lineNum, err)
+			return BuildCacheInfo{}, fmt.Errorf("clean: invalid line %d in docker system df: %w", lineNum, err)
 		}
 
 		if row.Type != "Build Cache" {
@@ -240,7 +240,7 @@ func getBuildCacheFromSystemDF(ctx context.Context, timeout time.Duration) (Buil
 
 		sizeBytes, err := parseSizeToBytes(row.Size)
 		if err != nil {
-			return BuildCacheInfo{}, fmt.Errorf("invalid build cache size on line %d: %w", lineNum, err)
+			return BuildCacheInfo{}, fmt.Errorf("clean: invalid build cache size on line %d: %w", lineNum, err)
 		}
 
 		return BuildCacheInfo{SizeBytes: sizeBytes, SizeLabel: strings.TrimSpace(row.Size), Available: true, Approx: true}, nil

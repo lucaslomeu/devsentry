@@ -68,7 +68,7 @@ func getCPUInfo(ctx context.Context) (CPUInfo, error) {
 
 	cores, err := strconv.Atoi(strings.TrimSpace(coresStr))
 	if err != nil {
-		return CPUInfo{}, fmt.Errorf("failed to parse CPU core count: %w", err)
+		return CPUInfo{}, fmt.Errorf("status: failed to parse CPU core count: %w", err)
 	}
 
 	loadAvg, err := runCommand(ctx, "sysctl", "-n", "vm.loadavg")
@@ -98,7 +98,7 @@ func getMemoryInfo(ctx context.Context) (MemoryInfo, error) {
 
 	total, err := strconv.ParseUint(strings.TrimSpace(totalStr), 10, 64)
 	if err != nil {
-		return MemoryInfo{}, fmt.Errorf("failed to parse total memory: %w", err)
+		return MemoryInfo{}, fmt.Errorf("status: failed to parse total memory: %w", err)
 	}
 
 	vmStat, err := runCommand(ctx, "vm_stat")
@@ -143,7 +143,7 @@ func getMemoryInfo(ctx context.Context) (MemoryInfo, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return MemoryInfo{}, fmt.Errorf("failed to read vm_stat output: %w", err)
+		return MemoryInfo{}, fmt.Errorf("status: failed to read vm_stat output: %w", err)
 	}
 
 	freeBytes := (freePages + inactivePages + speculativePages) * pageSize
@@ -167,25 +167,25 @@ func getDiskInfo(ctx context.Context) (DiskInfo, error) {
 
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) < 2 {
-		return DiskInfo{}, fmt.Errorf("unexpected df output")
+		return DiskInfo{}, fmt.Errorf("status: unexpected df output")
 	}
 
 	fields := strings.Fields(lines[1])
 	if len(fields) < 5 {
-		return DiskInfo{}, fmt.Errorf("unexpected df output")
+		return DiskInfo{}, fmt.Errorf("status: unexpected df output")
 	}
 
 	totalKiB, err := strconv.ParseUint(fields[1], 10, 64)
 	if err != nil {
-		return DiskInfo{}, fmt.Errorf("failed to parse df total: %w", err)
+		return DiskInfo{}, fmt.Errorf("status: failed to parse df total: %w", err)
 	}
 	usedKiB, err := strconv.ParseUint(fields[2], 10, 64)
 	if err != nil {
-		return DiskInfo{}, fmt.Errorf("failed to parse df used: %w", err)
+		return DiskInfo{}, fmt.Errorf("status: failed to parse df used: %w", err)
 	}
 	availKiB, err := strconv.ParseUint(fields[3], 10, 64)
 	if err != nil {
-		return DiskInfo{}, fmt.Errorf("failed to parse df available: %w", err)
+		return DiskInfo{}, fmt.Errorf("status: failed to parse df available: %w", err)
 	}
 
 	return DiskInfo{
@@ -268,7 +268,7 @@ func getProcessCounts(ctx context.Context) ([]ProcessCount, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read ps output: %w", err)
+		return nil, fmt.Errorf("status: failed to read ps output: %w", err)
 	}
 
 	result := make([]ProcessCount, 0, len(rules))
@@ -386,20 +386,20 @@ func parseLoadAvg(line string) (float64, float64, float64, error) {
 	trimmed = strings.TrimSuffix(trimmed, "}")
 	parts := strings.Fields(trimmed)
 	if len(parts) < 3 {
-		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
+		return 0, 0, 0, fmt.Errorf("status: invalid load average: %q", line)
 	}
 
 	load1, err := strconv.ParseFloat(strings.ReplaceAll(parts[0], ",", "."), 64)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
+		return 0, 0, 0, fmt.Errorf("status: invalid load average: %q", line)
 	}
 	load5, err := strconv.ParseFloat(strings.ReplaceAll(parts[1], ",", "."), 64)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
+		return 0, 0, 0, fmt.Errorf("status: invalid load average: %q", line)
 	}
 	load15, err := strconv.ParseFloat(strings.ReplaceAll(parts[2], ",", "."), 64)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid load average: %q", line)
+		return 0, 0, 0, fmt.Errorf("status: invalid load average: %q", line)
 	}
 
 	return load1, load5, load15, nil
@@ -415,14 +415,14 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 
 	if err := cmd.Run(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			return "", fmt.Errorf("command not found: %s", name)
+			return "", fmt.Errorf("status: command not found: %s", name)
 		}
 
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return "", fmt.Errorf("failed to run %s: %s", name, msg)
+		return "", fmt.Errorf("status: failed to run %s: %s", name, msg)
 	}
 
 	return out.String(), nil
