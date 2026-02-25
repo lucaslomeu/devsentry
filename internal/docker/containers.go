@@ -2,12 +2,9 @@ package docker
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
@@ -26,7 +23,7 @@ type dockerPSRow struct {
 }
 
 func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
-	output, err := runDockerPS(ctx)
+	output, err := Run(ctx, 0, "ps", "--format", "{{json .}}")
 	if err != nil {
 		return nil, err
 	}
@@ -37,29 +34,6 @@ func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
 	}
 
 	return results, nil
-}
-
-func runDockerPS(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "docker", "ps", "--format", "{{json .}}")
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return "", fmt.Errorf("docker not found in PATH")
-		}
-
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("failed to run docker ps: %s", msg)
-	}
-
-	return out.String(), nil
 }
 
 func parseDockerPSOutput(output string) ([]ContainerInfo, error) {

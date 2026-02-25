@@ -1,15 +1,14 @@
 package clean
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"devsentry/internal/docker"
 )
 
 const defaultCleanTimeout = 60 * time.Second
@@ -60,10 +59,6 @@ type containerRow struct {
 
 // BuildPlan collects the items that would be cleaned and estimates reclaimable space.
 func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
-	if err := ensureDockerCLI(); err != nil {
-		return Plan{}, err
-	}
-
 	timeout := normalizeTimeout(opts.Timeout)
 
 	images, imagesTotal, err := listDanglingImages(ctx, timeout)
@@ -110,19 +105,15 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 
 // Apply executes the cleanup commands.
 func Apply(ctx context.Context, opts Options) error {
-	if err := ensureDockerCLI(); err != nil {
-		return err
-	}
-
 	timeout := normalizeTimeout(opts.Timeout)
 
-	if _, err := runDockerCommand(ctx, timeout, "image", "prune", "-f"); err != nil {
+	if _, err := docker.Run(ctx, timeout, "image", "prune", "-f"); err != nil {
 		return err
 	}
-	if _, err := runDockerCommand(ctx, timeout, "container", "prune", "-f"); err != nil {
+	if _, err := docker.Run(ctx, timeout, "container", "prune", "-f"); err != nil {
 		return err
 	}
-	if _, err := runDockerCommand(ctx, timeout, "builder", "prune", "-f"); err != nil {
+	if _, err := docker.Run(ctx, timeout, "builder", "prune", "-f"); err != nil {
 		return err
 	}
 
@@ -130,7 +121,7 @@ func Apply(ctx context.Context, opts Options) error {
 }
 
 func listDanglingImages(ctx context.Context, timeout time.Duration) ([]ImageItem, uint64, error) {
-	out, err := runDockerCommand(ctx, timeout, "image", "ls", "-f", "dangling=true", "--format", "{{json .}}")
+	out, err := docker.Run(ctx, timeout, "image", "ls", "-f", "dangling=true", "--format", "{{json .}}")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -167,7 +158,7 @@ func listDanglingImages(ctx context.Context, timeout time.Duration) ([]ImageItem
 }
 
 func listStoppedContainers(ctx context.Context, timeout time.Duration) ([]ContainerItem, uint64, error) {
-	out, err := runDockerCommand(ctx, timeout, "ps", "-a", "--filter", "status=exited", "--filter", "status=dead", "--size", "--format", "{{json .}}")
+	out, err := docker.Run(ctx, timeout, "ps", "-a", "--filter", "status=exited", "--filter", "status=dead", "--size", "--format", "{{json .}}")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -205,7 +196,7 @@ func listStoppedContainers(ctx context.Context, timeout time.Duration) ([]Contai
 }
 
 func getBuildCacheEstimate(ctx context.Context, timeout time.Duration) (BuildCacheInfo, error) {
-	out, err := runDockerCommand(ctx, timeout, "builder", "prune", "--dry-run", "--force")
+	out, err := docker.Run(ctx, timeout, "builder", "prune", "--dry-run", "--force")
 	if err == nil {
 		sizeLabel, sizeBytes := parseReclaimedSpace(out)
 		if sizeLabel != "" {
@@ -222,7 +213,7 @@ func getBuildCacheEstimate(ctx context.Context, timeout time.Duration) (BuildCac
 }
 
 func getBuildCacheFromSystemDF(ctx context.Context, timeout time.Duration) (BuildCacheInfo, error) {
-	out, err := runDockerCommand(ctx, timeout, "system", "df", "--format", "{{json .}}")
+	out, err := docker.Run(ctx, timeout, "system", "df", "--format", "{{json .}}")
 	if err != nil {
 		return BuildCacheInfo{}, err
 	}
@@ -371,48 +362,12 @@ func shortenID(id string) string {
 	return trimmed[:12] + "..."
 }
 
-func ensureDockerCLI() error {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker not found in PATH")
-	}
-	return nil
-}
-
 func isUnsupportedDryRun(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "unknown flag: --dry-run") || strings.Contains(msg, "unknown flag --dry-run")
-}
-
-func runDockerCommand(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return "", fmt.Errorf("docker not found in PATH")
-		}
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", fmt.Errorf("docker command timed out after %s", timeout)
-		}
-
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("failed to run docker %s: %s", strings.Join(args, " "), msg)
-	}
-
-	return out.String(), nil
 }
 
 func normalizeTimeout(timeout time.Duration) time.Duration {

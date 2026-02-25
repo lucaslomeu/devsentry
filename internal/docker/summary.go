@@ -2,12 +2,9 @@ package docker
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -36,7 +33,7 @@ type systemDFRow struct {
 
 // GetSummary returns a Docker summary (containers, images, volumes, build cache).
 func GetSummary(ctx context.Context) (Summary, error) {
-	infoOut, err := runDockerCommand(ctx, "info", "--format", "{{json .}}")
+	infoOut, err := Run(ctx, 0, "info", "--format", "{{json .}}")
 	if err != nil {
 		return Summary{}, err
 	}
@@ -46,7 +43,7 @@ func GetSummary(ctx context.Context) (Summary, error) {
 		return Summary{}, err
 	}
 
-	dfOut, err := runDockerCommand(ctx, "system", "df", "--format", "{{json .}}")
+	dfOut, err := Run(ctx, 0, "system", "df", "--format", "{{json .}}")
 	if err != nil {
 		return Summary{}, err
 	}
@@ -66,29 +63,6 @@ func GetSummary(ctx context.Context) (Summary, error) {
 		BuildCache:        buildCache,
 		BuildCacheSize:    buildCacheSize,
 	}, nil
-}
-
-func runDockerCommand(ctx context.Context, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "docker", args...)
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return "", fmt.Errorf("docker not found: %w", err)
-		}
-
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("failed to execute docker %s: %s", strings.Join(args, " "), msg)
-	}
-
-	return out.String(), nil
 }
 
 func parseDockerInfo(output string) (int, int, error) {

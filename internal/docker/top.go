@@ -1,19 +1,13 @@
 package docker
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
-
-const topTimeout = 5 * time.Second
 
 const maxTopItems = 10
 
@@ -77,7 +71,7 @@ func GetTop(ctx context.Context, opts TopOptions) (TopResult, error) {
 }
 
 func topImages(ctx context.Context) ([]TopItem, error) {
-	out, err := runDockerCommandWithTimeout(ctx, "image", "ls", "--format", "{{json .}}")
+	out, err := Run(ctx, 0, "image", "ls", "--format", "{{json .}}")
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +111,7 @@ func topImages(ctx context.Context) ([]TopItem, error) {
 }
 
 func topVolumes(ctx context.Context, opts TopOptions) ([]TopItem, error) {
-	out, err := runDockerCommandWithTimeout(ctx, "volume", "ls", "--format", "{{json .}}")
+	out, err := Run(ctx, 0, "volume", "ls", "--format", "{{json .}}")
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +145,7 @@ func topVolumes(ctx context.Context, opts TopOptions) ([]TopItem, error) {
 	}
 
 	inspectArgs := append([]string{"volume", "inspect", "--size", "--format", "{{json .}}"}, volumeNames...)
-	inspectOut, err := runDockerCommandWithTimeout(ctx, inspectArgs...)
+	inspectOut, err := Run(ctx, 0, inspectArgs...)
 	if err != nil {
 		if isUnsupportedVolumeSizeFlag(err) {
 			return topVolumesFromSystemDF(ctx, volumeNames, opts)
@@ -336,7 +330,7 @@ func isUnsupportedVolumeSizeFlag(err error) bool {
 }
 
 func topVolumesFromSystemDF(ctx context.Context, volumeNames []string, opts TopOptions) ([]TopItem, error) {
-	out, err := runDockerCommandWithTimeout(ctx, "system", "df", "-v", "--format", "{{json .}}")
+	out, err := Run(ctx, 0, "system", "df", "-v", "--format", "{{json .}}")
 	if err != nil {
 		return nil, err
 	}
@@ -393,33 +387,4 @@ func topVolumesFromSystemDF(ctx context.Context, volumeNames []string, opts TopO
 	}
 
 	return items, nil
-}
-
-func runDockerCommandWithTimeout(ctx context.Context, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, topTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return "", fmt.Errorf("docker not found in PATH")
-		}
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", fmt.Errorf("docker command timed out after %s", topTimeout)
-		}
-
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("failed to run docker %s: %s", strings.Join(args, " "), msg)
-	}
-
-	return out.String(), nil
 }
