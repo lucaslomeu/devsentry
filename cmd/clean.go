@@ -84,7 +84,9 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintf(out, "Estimated Space to Reclaim:\n  %s%s\n\n", prefix, formatBytes(plan.EstimatedBytes))
 	} else {
-		fmt.Fprintln(out, "Estimated Space to Reclaim:\n  Unknown\n")
+		fmt.Fprintln(out, "Estimated Space to Reclaim:")
+		fmt.Fprintln(out, "  Unknown")
+		fmt.Fprintln(out)
 	}
 
 	if !cleanApply {
