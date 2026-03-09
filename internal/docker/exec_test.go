@@ -10,7 +10,7 @@ import (
 
 const fakeDockerScript = `#!/bin/sh
 if [ -n "$FAKE_DOCKER_SLEEP" ]; then
-  sleep "$FAKE_DOCKER_SLEEP"
+  /bin/sleep "$FAKE_DOCKER_SLEEP"
 fi
 if [ -n "$FAKE_DOCKER_STDOUT" ]; then
   printf "%s" "$FAKE_DOCKER_STDOUT"
