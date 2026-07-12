@@ -14,7 +14,10 @@ import (
 const defaultCleanTimeout = 60 * time.Second
 
 type Options struct {
-	Timeout time.Duration
+	Timeout    time.Duration
+	Images     bool
+	Containers bool
+	BuildCache bool
 }
 
 type Plan struct {
@@ -60,37 +63,59 @@ type containerRow struct {
 // BuildPlan collects the items that would be cleaned and estimates reclaimable space.
 func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 	timeout := normalizeTimeout(opts.Timeout)
+	imagesSelected, containersSelected, cacheSelected := selectedScopes(opts)
 
-	images, imagesTotal, err := listDanglingImages(ctx, timeout)
-	if err != nil {
-		return Plan{}, err
+	var images []ImageItem
+	var imagesTotal uint64
+	if imagesSelected {
+		var err error
+		images, imagesTotal, err = listDanglingImages(ctx, timeout)
+		if err != nil {
+			return Plan{}, err
+		}
 	}
 
-	containers, containersTotal, err := listStoppedContainers(ctx, timeout)
-	if err != nil {
-		return Plan{}, err
+	var containers []ContainerItem
+	var containersTotal uint64
+	if containersSelected {
+		var err error
+		containers, containersTotal, err = listStoppedContainers(ctx, timeout)
+		if err != nil {
+			return Plan{}, err
+		}
 	}
 
-	buildCache, err := getBuildCacheEstimate(ctx, timeout)
-	if err != nil {
-		return Plan{}, err
+	var buildCache BuildCacheInfo
+	if cacheSelected {
+		var err error
+		buildCache, err = getBuildCacheEstimate(ctx, timeout)
+		if err != nil {
+			return Plan{}, err
+		}
 	}
 
-	plannedActions := []string{
-		"docker image prune",
-		"docker container prune",
-		"docker builder prune",
+	plannedActions := make([]string, 0, 3)
+	if imagesSelected {
+		plannedActions = append(plannedActions, "docker image prune")
+	}
+	if containersSelected {
+		plannedActions = append(plannedActions, "docker container prune")
+	}
+	if cacheSelected {
+		plannedActions = append(plannedActions, "docker builder prune")
 	}
 
 	estimated := imagesTotal + containersTotal
 	estimateApprox := false
-	if buildCache.Available {
-		estimated += buildCache.SizeBytes
-		if buildCache.Approx {
+	if cacheSelected {
+		if buildCache.Available {
+			estimated += buildCache.SizeBytes
+			if buildCache.Approx {
+				estimateApprox = true
+			}
+		} else {
 			estimateApprox = true
 		}
-	} else {
-		estimateApprox = true
 	}
 
 	return Plan{
@@ -106,18 +131,32 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 // Apply executes the cleanup commands.
 func Apply(ctx context.Context, opts Options) error {
 	timeout := normalizeTimeout(opts.Timeout)
+	imagesSelected, containersSelected, cacheSelected := selectedScopes(opts)
 
-	if _, err := docker.Run(ctx, timeout, "image", "prune", "-f"); err != nil {
-		return err
+	if imagesSelected {
+		if _, err := docker.Run(ctx, timeout, "image", "prune", "-f"); err != nil {
+			return err
+		}
 	}
-	if _, err := docker.Run(ctx, timeout, "container", "prune", "-f"); err != nil {
-		return err
+	if containersSelected {
+		if _, err := docker.Run(ctx, timeout, "container", "prune", "-f"); err != nil {
+			return err
+		}
 	}
-	if _, err := docker.Run(ctx, timeout, "builder", "prune", "-f"); err != nil {
-		return err
+	if cacheSelected {
+		if _, err := docker.Run(ctx, timeout, "builder", "prune", "-f"); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func selectedScopes(opts Options) (images, containers, cache bool) {
+	if !opts.Images && !opts.Containers && !opts.BuildCache {
+		return true, true, true
+	}
+	return opts.Images, opts.Containers, opts.BuildCache
 }
 
 func listDanglingImages(ctx context.Context, timeout time.Duration) ([]ImageItem, uint64, error) {
