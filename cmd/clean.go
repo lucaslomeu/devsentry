@@ -36,6 +36,7 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 		Images:     selectAll || cleanImages,
 		Containers: selectAll || cleanContainers,
 		BuildCache: selectAll || cleanCache,
+		All:        cleanAll,
 	}
 	plan, err := clean.BuildPlan(cmd.Context(), opts)
 	if err != nil {
@@ -52,6 +53,12 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 
 	if opts.Images {
 		fmt.Fprintf(out, "  Dangling images:    %d (%s)\n", len(plan.DanglingImages), formatBytes(sumImageBytes(plan.DanglingImages)))
+		if opts.All {
+			fmt.Fprintf(out, "  Other unused images: %d (%s)\n", len(plan.UnusedImages), formatBytes(sumImageBytes(plan.UnusedImages)))
+			for _, image := range plan.UnusedImages {
+				fmt.Fprintf(out, "    %s  %s  %s\n", image.Name, image.ID, image.SizeLabel)
+			}
+		}
 	}
 	if opts.Containers {
 		fmt.Fprintf(out, "  Stopped containers: %d (%s)\n", len(plan.StoppedContainers), formatBytes(sumContainerBytes(plan.StoppedContainers)))
@@ -98,7 +105,7 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanImages, "images", false, "Clean dangling images")
 	cleanCmd.Flags().BoolVar(&cleanContainers, "containers", false, "Clean stopped containers")
 	cleanCmd.Flags().BoolVar(&cleanCache, "cache", false, "Clean the Docker build cache")
-	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Clean images, containers, and build cache")
+	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Also clean all images unused after stopped containers are removed")
 	cleanCmd.Flags().DurationVar(&cleanTimeout, "timeout", 60*time.Second, "Timeout for Docker commands")
 }
 
