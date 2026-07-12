@@ -7,10 +7,12 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "devsentry",
-	Short: "Devsentry CLI",
-	Long:  "Devsentry is a command-line interface tool for managing and monitoring development environments.",
-	Run:   runRootCmd,
+	Use:           "devsentry",
+	Short:         "Devsentry CLI",
+	Long:          "Devsentry is a command-line interface tool for managing and monitoring development environments.",
+	SilenceErrors: true,
+	SilenceUsage:  true,
+	Run:           runRootCmd,
 }
 
 func runRootCmd(cmd *cobra.Command, args []string) {
