@@ -18,10 +18,15 @@ exit 0
 
 func setupFakeDocker(t *testing.T) string {
 	t.Helper()
+	return setupFakeDockerScript(t, fakeDockerScript)
+}
+
+func setupFakeDockerScript(t *testing.T, script string) string {
+	t.Helper()
 
 	dir := t.TempDir()
 	dockerPath := filepath.Join(dir, "docker")
-	if err := os.WriteFile(dockerPath, []byte(fakeDockerScript), 0o755); err != nil {
+	if err := os.WriteFile(dockerPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("failed to write fake docker: %v", err)
 	}
 
@@ -29,6 +34,39 @@ func setupFakeDocker(t *testing.T) string {
 	t.Setenv("PATH", dir)
 	t.Setenv("FAKE_DOCKER_LOG", logPath)
 	return logPath
+}
+
+func TestAllModeIncludesImagesUsedOnlyByStoppedContainers(t *testing.T) {
+	const script = `#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_DOCKER_LOG"
+if [ "$1 $2" = "image ls" ]; then
+  printf '%s\n' '{"ID":"sha256:aaa","Repository":"kibana","Tag":"7.12.0","Size":"1GB"}'
+  printf '%s\n' '{"ID":"sha256:bbb","Repository":"postgres","Tag":"16","Size":"300MB"}'
+  printf '%s\n' '{"ID":"sha256:ccc","Repository":"node","Tag":"22-alpine","Size":"100MB"}'
+  printf '%s\n' '{"ID":"sha256:ddd","Repository":"<none>","Tag":"<none>","Size":"50MB"}'
+elif [ "$1 $2" = "ps -q" ]; then
+  printf '%s\n' 'running-container'
+elif [ "$1 $2" = "container inspect" ]; then
+  printf '%s\n' 'sha256:aaa'
+fi
+exit 0
+`
+	setupFakeDockerScript(t, script)
+
+	dangling, unused, total, err := listImageCleanupCandidates(context.Background(), 0, true, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(dangling) != 1 || dangling[0].ID != "ddd" {
+		t.Fatalf("unexpected dangling images: %#v", dangling)
+	}
+	if len(unused) != 2 || unused[0].Name != "postgres:16" || unused[1].Name != "node:22-alpine" {
+		t.Fatalf("unexpected unused images: %#v", unused)
+	}
+	expected := uint64(450 * 1024 * 1024)
+	if total != expected {
+		t.Fatalf("unexpected total: got %d, want %d", total, expected)
+	}
 }
 
 func TestParseContainerSize(t *testing.T) {
@@ -95,7 +133,7 @@ func TestBuildPlanOnlyCollectsSelectedScope(t *testing.T) {
 	}
 
 	commands := readFakeDockerLog(t, logPath)
-	if len(commands) != 1 || !strings.HasPrefix(commands[0], "image ls ") {
+	if len(commands) != 2 || !strings.HasPrefix(commands[0], "image ls ") || commands[1] != "ps -a -q" {
 		t.Fatalf("unexpected commands: %#v", commands)
 	}
 }
@@ -119,7 +157,12 @@ func TestApplyExecutesOnlySelectedScopes(t *testing.T) {
 		{
 			name:     "default remains all scopes",
 			opts:     Options{},
-			expected: []string{"image prune -f", "container prune -f", "builder prune -f"},
+			expected: []string{"container prune -f", "image prune -f", "builder prune -f"},
+		},
+		{
+			name:     "all removes unused images after containers",
+			opts:     Options{All: true},
+			expected: []string{"container prune -f", "image prune -a -f", "builder prune -f"},
 		},
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,10 +19,12 @@ type Options struct {
 	Images     bool
 	Containers bool
 	BuildCache bool
+	All        bool
 }
 
 type Plan struct {
 	DanglingImages    []ImageItem
+	UnusedImages      []ImageItem
 	StoppedContainers []ContainerItem
 	BuildCache        BuildCacheInfo
 	PlannedActions    []string
@@ -31,6 +34,7 @@ type Plan struct {
 
 type ImageItem struct {
 	ID        string
+	Name      string
 	SizeBytes uint64
 	SizeLabel string
 }
@@ -50,8 +54,10 @@ type BuildCacheInfo struct {
 }
 
 type imageRow struct {
-	ID   string `json:"ID"`
-	Size string `json:"Size"`
+	ID         string `json:"ID"`
+	Repository string `json:"Repository"`
+	Tag        string `json:"Tag"`
+	Size       string `json:"Size"`
 }
 
 type containerRow struct {
@@ -66,10 +72,11 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 	imagesSelected, containersSelected, cacheSelected := selectedScopes(opts)
 
 	var images []ImageItem
+	var unusedImages []ImageItem
 	var imagesTotal uint64
 	if imagesSelected {
 		var err error
-		images, imagesTotal, err = listDanglingImages(ctx, timeout)
+		images, unusedImages, imagesTotal, err = listImageCleanupCandidates(ctx, timeout, opts.All, containersSelected)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -95,18 +102,22 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 	}
 
 	plannedActions := make([]string, 0, 3)
-	if imagesSelected {
-		plannedActions = append(plannedActions, "docker image prune")
-	}
 	if containersSelected {
 		plannedActions = append(plannedActions, "docker container prune")
+	}
+	if imagesSelected {
+		action := "docker image prune"
+		if opts.All {
+			action += " -a"
+		}
+		plannedActions = append(plannedActions, action)
 	}
 	if cacheSelected {
 		plannedActions = append(plannedActions, "docker builder prune")
 	}
 
 	estimated := imagesTotal + containersTotal
-	estimateApprox := false
+	estimateApprox := opts.All
 	if cacheSelected {
 		if buildCache.Available {
 			estimated += buildCache.SizeBytes
@@ -120,6 +131,7 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 
 	return Plan{
 		DanglingImages:    images,
+		UnusedImages:      unusedImages,
 		StoppedContainers: containers,
 		BuildCache:        buildCache,
 		PlannedActions:    plannedActions,
@@ -133,13 +145,17 @@ func Apply(ctx context.Context, opts Options) error {
 	timeout := normalizeTimeout(opts.Timeout)
 	imagesSelected, containersSelected, cacheSelected := selectedScopes(opts)
 
-	if imagesSelected {
-		if _, err := docker.Run(ctx, timeout, "image", "prune", "-f"); err != nil {
+	if containersSelected {
+		if _, err := docker.Run(ctx, timeout, "container", "prune", "-f"); err != nil {
 			return err
 		}
 	}
-	if containersSelected {
-		if _, err := docker.Run(ctx, timeout, "container", "prune", "-f"); err != nil {
+	if imagesSelected {
+		args := []string{"image", "prune", "-f"}
+		if opts.All {
+			args = []string{"image", "prune", "-a", "-f"}
+		}
+		if _, err := docker.Run(ctx, timeout, args...); err != nil {
 			return err
 		}
 	}
@@ -159,14 +175,14 @@ func selectedScopes(opts Options) (images, containers, cache bool) {
 	return opts.Images, opts.Containers, opts.BuildCache
 }
 
-func listDanglingImages(ctx context.Context, timeout time.Duration) ([]ImageItem, uint64, error) {
-	out, err := docker.Run(ctx, timeout, "image", "ls", "-f", "dangling=true", "--format", "{{json .}}")
+func listImageCleanupCandidates(ctx context.Context, timeout time.Duration, includeUnused, containersWillBePruned bool) ([]ImageItem, []ImageItem, uint64, error) {
+	out, err := docker.Run(ctx, timeout, "image", "ls", "-a", "--no-trunc", "--format", "{{json .}}")
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
-	items := make([]ImageItem, 0)
-	var total uint64
+	rowsByID := make(map[string]imageRow)
+	namesByID := make(map[string][]string)
 	lineNum := 0
 	for _, raw := range strings.Split(out, "\n") {
 		lineNum++
@@ -174,26 +190,116 @@ func listDanglingImages(ctx context.Context, timeout time.Duration) ([]ImageItem
 		if line == "" {
 			continue
 		}
-
 		var row imageRow
 		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			return nil, 0, fmt.Errorf("clean: invalid line %d in docker image ls: %w", lineNum, err)
+			return nil, nil, 0, fmt.Errorf("clean: invalid line %d in docker image ls: %w", lineNum, err)
 		}
-
-		sizeBytes, err := parseSizeToBytes(row.Size)
-		if err != nil {
-			return nil, 0, fmt.Errorf("clean: invalid image size on line %d: %w", lineNum, err)
+		id := normalizeImageID(row.ID)
+		if id == "" {
+			continue
 		}
-
-		items = append(items, ImageItem{
-			ID:        shortenID(row.ID),
-			SizeBytes: sizeBytes,
-			SizeLabel: strings.TrimSpace(row.Size),
-		})
-		total += sizeBytes
+		rowsByID[id] = row
+		if name := imageName(row); name != "<dangling>" {
+			namesByID[id] = appendUnique(namesByID[id], name)
+		}
 	}
 
-	return items, total, nil
+	referenced, err := referencedImageIDs(ctx, timeout, !containersWillBePruned)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	dangling := make([]ImageItem, 0)
+	unused := make([]ImageItem, 0)
+	var total uint64
+	for id, row := range rowsByID {
+		if referenced[id] {
+			continue
+		}
+		sizeBytes, err := parseSizeToBytes(row.Size)
+		if err != nil {
+			return nil, nil, 0, fmt.Errorf("clean: invalid image size for %s: %w", shortenID(id), err)
+		}
+		item := ImageItem{ID: shortenID(id), Name: imageName(row), SizeBytes: sizeBytes, SizeLabel: strings.TrimSpace(row.Size)}
+		if names := namesByID[id]; len(names) > 0 {
+			item.Name = strings.Join(names, ", ")
+		}
+		if isDanglingImage(row) {
+			dangling = append(dangling, item)
+			total += sizeBytes
+		} else if includeUnused {
+			unused = append(unused, item)
+			total += sizeBytes
+		}
+	}
+
+	sortImageItems(dangling)
+	sortImageItems(unused)
+	return dangling, unused, total, nil
+}
+
+func referencedImageIDs(ctx context.Context, timeout time.Duration, includeStopped bool) (map[string]bool, error) {
+	args := []string{"ps"}
+	if includeStopped {
+		args = append(args, "-a")
+	}
+	args = append(args, "-q")
+	out, err := docker.Run(ctx, timeout, args...)
+	if err != nil {
+		return nil, err
+	}
+	containerIDs := strings.Fields(out)
+	result := make(map[string]bool)
+	if len(containerIDs) == 0 {
+		return result, nil
+	}
+	inspectArgs := append([]string{"container", "inspect", "--format", "{{.Image}}"}, containerIDs...)
+	out, err = docker.Run(ctx, timeout, inspectArgs...)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range strings.Fields(out) {
+		if normalized := normalizeImageID(id); normalized != "" {
+			result[normalized] = true
+		}
+	}
+	return result, nil
+}
+
+func normalizeImageID(id string) string {
+	return strings.TrimPrefix(strings.TrimSpace(id), "sha256:")
+}
+
+func isDanglingImage(row imageRow) bool {
+	return (row.Repository == "" || row.Repository == "<none>") && (row.Tag == "" || row.Tag == "<none>")
+}
+
+func imageName(row imageRow) string {
+	if isDanglingImage(row) {
+		return "<dangling>"
+	}
+	if row.Tag == "" || row.Tag == "<none>" {
+		return row.Repository
+	}
+	return row.Repository + ":" + row.Tag
+}
+
+func appendUnique(items []string, value string) []string {
+	for _, item := range items {
+		if item == value {
+			return items
+		}
+	}
+	return append(items, value)
+}
+
+func sortImageItems(items []ImageItem) {
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].SizeBytes == items[j].SizeBytes {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].SizeBytes > items[j].SizeBytes
+	})
 }
 
 func listStoppedContainers(ctx context.Context, timeout time.Duration) ([]ContainerItem, uint64, error) {
