@@ -23,6 +23,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check installer syntax
+        run: sh -n install.sh tests/install_test.sh
+
+      - name: Test installer
+        run: sh tests/install_test.sh
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:

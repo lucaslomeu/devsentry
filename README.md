@@ -4,21 +4,49 @@ Devsentry is a CLI to inspect Docker resources and basic environment status.
 
 ## Installation
 
-Release binaries (macOS arm64/amd64) are published on GitHub Releases.
+Install the latest release on macOS:
 
-Local build:
+```bash
+curl -fsSL https://raw.githubusercontent.com/lucaslomeu/devsentry/main/install.sh | sh
+```
+
+The installer detects Apple Silicon or Intel, verifies the release checksum, and
+installs `devsentry` in `/usr/local/bin`. Administrator permission may be
+requested when that directory is not writable.
+
+Install in a custom directory without `sudo`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lucaslomeu/devsentry/main/install.sh | \
+  DEVSENTRY_INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+Install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lucaslomeu/devsentry/main/install.sh | \
+  DEVSENTRY_VERSION=v0.3.0 sh
+```
+
+Verify the installation:
+
+```bash
+devsentry version
+devsentry --help
+```
+
+Release binaries can also be downloaded manually from
+[GitHub Releases](https://github.com/lucaslomeu/devsentry/releases).
+
+## Development
+
+Build locally:
 
 ```bash
 go build -o devsentry .
 ```
 
-Install locally (optional):
-
-```bash
-sudo mv devsentry /usr/local/bin/
-```
-
-Local run (development):
+Run without installing:
 
 ```bash
 go run .
