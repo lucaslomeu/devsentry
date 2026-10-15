@@ -10,14 +10,14 @@ import (
 )
 
 type Summary struct {
-	ContainersRunning int
-	ContainersStopped int
-	Images            int
-	ImagesSize        string
-	Volumes           int
-	VolumesSize       string
-	BuildCache        int
-	BuildCacheSize    string
+	ContainersRunning int    `json:"containers_running"`
+	ContainersStopped int    `json:"containers_stopped"`
+	Images            int    `json:"images"`
+	ImagesSize        string `json:"images_size"`
+	Volumes           int    `json:"volumes"`
+	VolumesSize       string `json:"volumes_size"`
+	BuildCache        int    `json:"build_cache"`
+	BuildCacheSize    string `json:"build_cache_size"`
 }
 
 type dockerInfoRow struct {

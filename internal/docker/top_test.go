@@ -1,6 +1,11 @@
 package docker
 
-import "testing"
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseSizeToBytes(t *testing.T) {
 	bytes, err := parseSizeToBytes("1KB")
@@ -98,5 +103,32 @@ func TestSizeUnitMultiplier(t *testing.T) {
 	}
 	if got := sizeUnitMultiplier("mib"); got != 1024*1024 {
 		t.Fatalf("unexpected multiplier: %v", got)
+	}
+}
+
+func TestGetTopHonorsLimit(t *testing.T) {
+	dir := t.TempDir()
+	dockerPath := filepath.Join(dir, "docker")
+	script := `#!/bin/sh
+if [ "$1 $2" = "image ls" ]; then
+  printf '%s\n' '{"Repository":"one","Tag":"latest","ID":"1","Size":"3GB"}'
+  printf '%s\n' '{"Repository":"two","Tag":"latest","ID":"2","Size":"2GB"}'
+  printf '%s\n' '{"Repository":"three","Tag":"latest","ID":"3","Size":"1GB"}'
+fi
+`
+	if err := os.WriteFile(dockerPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("failed to write fake docker: %v", err)
+	}
+	t.Setenv("PATH", dir)
+
+	result, err := GetTop(context.Background(), TopOptions{Limit: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Images) != 2 {
+		t.Fatalf("unexpected images: %#v", result.Images)
+	}
+	if result.Images[0].Name != "one:latest" || result.Images[1].Name != "two:latest" {
+		t.Fatalf("unexpected ordering: %#v", result.Images)
 	}
 }
