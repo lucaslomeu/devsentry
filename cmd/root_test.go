@@ -18,15 +18,16 @@ func executeRoot(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
-func TestRootCommandShowsWelcome(t *testing.T) {
+func TestRootCommandShowsQuickActions(t *testing.T) {
 	out, err := executeRoot(t)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := "Welcome to devsentry! Use 'devsentry --help' to see available commands.\n"
-	if out != expected {
-		t.Fatalf("unexpected output: %q", out)
+	for _, expected := range []string{"Devsentry", "Quick actions", "devsentry docker", "devsentry clean"} {
+		if !strings.Contains(out, expected) {
+			t.Fatalf("output does not contain %q: %q", expected, out)
+		}
 	}
 }
 
@@ -46,13 +47,13 @@ func TestVersionCommandOutput(t *testing.T) {
 	}
 }
 
-func TestDockerHelpContainsSubcommands(t *testing.T) {
+func TestDockerHelpContainsSimpleModes(t *testing.T) {
 	out, err := executeRoot(t, "docker", "--help")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	for _, expected := range []string{"ls", "summary", "top"} {
+	for _, expected := range []string{"--list", "--top", "--json"} {
 		if !strings.Contains(out, expected) {
 			t.Fatalf("docker help does not contain %q: %q", expected, out)
 		}
@@ -97,7 +98,7 @@ func TestValidateCleanFlagsRejectsAllWithIndividualScope(t *testing.T) {
 }
 
 func TestCleanScopeArgs(t *testing.T) {
-	if got := cleanScopeArgs(false, false, false, false); got != "--all" {
+	if got := cleanScopeArgs(false, false, false, false); got != "--images --containers --cache" {
 		t.Fatalf("unexpected default scope: %q", got)
 	}
 	if got := cleanScopeArgs(false, true, true, false); got != "--images --containers" {
@@ -124,5 +125,28 @@ func TestRootHelpDoesNotShowCompletion(t *testing.T) {
 
 	if strings.Contains(out, "completion") {
 		t.Fatalf("root help should not contain completion command: %q", out)
+	}
+}
+
+func TestCommandsRejectUnexpectedArguments(t *testing.T) {
+	err := statusCmd.Args(statusCmd, []string{"unexpected"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if !strings.Contains(err.Error(), `unknown command "unexpected"`) {
+		t.Fatalf("unexpected error: %q", err.Error())
+	}
+}
+
+func TestRootAliasesAreAvailableButHidden(t *testing.T) {
+	for _, name := range []string{"ls", "summary", "top"} {
+		command, _, err := rootCmd.Find([]string{name})
+		if err != nil {
+			t.Fatalf("failed to find alias %q: %v", name, err)
+		}
+		if !command.Hidden {
+			t.Fatalf("alias %q should be hidden from root help", name)
+		}
 	}
 }
