@@ -14,9 +14,19 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
-func GetStatus(ctx context.Context, _ Options) (Status, error) {
+const defaultStatusTimeout = 10 * time.Second
+
+func GetStatus(ctx context.Context, opts Options) (Status, error) {
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = defaultStatusTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	cpu, err := getCPUInfo(ctx)
 	if err != nil {
 		return Status{}, err
@@ -196,7 +206,7 @@ func getDiskInfo(ctx context.Context) (DiskInfo, error) {
 }
 
 func getPorts(ctx context.Context) ([]PortInfo, error) {
-	out, err := runCommand(ctx, "lsof", "-nP", "-iTCP", "-sTCP:LISTEN")
+	out, err := runCommandAllowNoResults(ctx, "lsof", "-nP", "-iTCP", "-sTCP:LISTEN")
 	if err != nil {
 		return nil, err
 	}
@@ -406,6 +416,14 @@ func parseLoadAvg(line string) (float64, float64, float64, error) {
 }
 
 func runCommand(ctx context.Context, name string, args ...string) (string, error) {
+	return runCommandInternal(ctx, false, name, args...)
+}
+
+func runCommandAllowNoResults(ctx context.Context, name string, args ...string) (string, error) {
+	return runCommandInternal(ctx, true, name, args...)
+}
+
+func runCommandInternal(ctx context.Context, allowNoResults bool, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 
 	var out bytes.Buffer
@@ -414,8 +432,15 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if allowNoResults && errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.TrimSpace(stderr.String()) == "" {
+			return "", nil
+		}
 		if errors.Is(err, exec.ErrNotFound) {
 			return "", fmt.Errorf("status: command not found: %s", name)
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", fmt.Errorf("status: command timed out: %s", name)
 		}
 
 		msg := strings.TrimSpace(stderr.String())
