@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "devsentry/docker-summary/v1",
+  "type": "object",
+  "required": ["schema_version", "command", "data"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command": { "const": "docker" },
+    "data": {
+      "type": "object",
+      "required": ["containers_running", "containers_stopped", "images", "volumes", "build_cache"],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -18,6 +18,8 @@ builds:
 
 archives:
   - formats: ["tar.gz"]
+    ids:
+      - devsentry
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:

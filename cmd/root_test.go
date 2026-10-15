@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
+
+	"devsentry/internal/clierr"
 )
 
 func executeRoot(t *testing.T, args ...string) (string, error) {
@@ -53,7 +56,7 @@ func TestDockerHelpContainsSimpleModes(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	for _, expected := range []string{"--list", "--top", "--json"} {
+	for _, expected := range []string{"--list", "--top", "--json", "--name", "--image", "--status", "--volume"} {
 		if !strings.Contains(out, expected) {
 			t.Fatalf("docker help does not contain %q: %q", expected, out)
 		}
@@ -66,10 +69,55 @@ func TestCleanHelpShowsFlags(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	for _, expected := range []string{"--apply", "--images", "--containers", "--cache", "--all", "--timeout"} {
+	for _, expected := range []string{"--apply", "--images", "--containers", "--cache", "--all", "--timeout", "--older-than", "--exclude-label"} {
 		if !strings.Contains(out, expected) {
 			t.Fatalf("clean help does not contain %q: %q", expected, out)
 		}
+	}
+}
+
+func TestInvalidDockerModeIsUsageError(t *testing.T) {
+	previousList, previousTop := dockerList, dockerTop
+	dockerList, dockerTop = true, true
+	t.Cleanup(func() {
+		dockerList, dockerTop = previousList, previousTop
+	})
+
+	err := runDockerOverview(dockerCmd, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, clierr.ErrUsage) {
+		t.Fatalf("unexpected error category: %v", err)
+	}
+}
+
+func TestExitCodeCategories(t *testing.T) {
+	if got := ExitCode(clierr.Wrap(clierr.ErrUsage, errors.New("bad flag"))); got != 2 {
+		t.Fatalf("unexpected usage exit code: %d", got)
+	}
+	if got := ExitCode(clierr.Wrap(clierr.ErrDockerUnavailable, errors.New("offline"))); got != 3 {
+		t.Fatalf("unexpected Docker exit code: %d", got)
+	}
+	if got := ExitCode(clierr.Wrap(clierr.ErrTimeout, errors.New("slow"))); got != 4 {
+		t.Fatalf("unexpected timeout exit code: %d", got)
+	}
+	if got := ExitCode(clierr.Wrap(clierr.ErrMutation, errors.New("failed"))); got != 5 {
+		t.Fatalf("unexpected mutation exit code: %d", got)
+	}
+}
+
+func TestQuietRootSuppressesHumanOutput(t *testing.T) {
+	previous := quiet
+	quiet = true
+	t.Cleanup(func() { quiet = previous })
+
+	out, err := executeRoot(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "" {
+		t.Fatalf("quiet root produced output: %q", out)
 	}
 }
 

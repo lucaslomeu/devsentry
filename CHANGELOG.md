@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.0] - 2026-10-15
+
+### Added
+
+- Added stable Docker list and top filters.
+- Added age and label filters for cleanup planning.
+- Added versioned JSON envelopes and schemas.
+- Added stable automation exit codes and `--quiet`.
+- Added release smoke tests for macOS `amd64` and `arm64` artifacts.
+
+### Changed
+
+- Froze the macOS CLI command and flag contract.
+- Installer validates release version before atomic replacement.
+- Cleanup previews expose the same filters used by apply operations.
+
+### Migration
+
+- Automation should consume `--json` and `CLI_COMPATIBILITY.md`.
+- Linux and Windows remain unsupported.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added

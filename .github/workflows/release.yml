@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -31,18 +33,31 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           grep -F "## [$VERSION]" CHANGELOG.md >/dev/null
 
+      - name: Check tag ancestry
+        run: |
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"
+
       - name: Validate GoReleaser configuration
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: v2.14.0
+          version: v2.18.3
           args: check
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: v2.14.0
+          version: v2.18.3
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Smoke test release artifacts
+        env:
+          DEVSENTRY_DIST_DIR: dist
+          DEVSENTRY_EXPECTED_VERSION: ${{ github.ref_name }}
+        run: |
+          DEVSENTRY_EXPECTED_VERSION="${DEVSENTRY_EXPECTED_VERSION#v}" \
+            tests/release_smoke_test.sh

@@ -15,7 +15,7 @@ var statusTimeout = 10 * time.Second
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Local environment status",
-	Args:  cobra.NoArgs,
+	Args:  func(cmd *cobra.Command, args []string) error { return usageArgs("status", args) },
 	RunE:  runStatusCmd,
 }
 
@@ -27,7 +27,10 @@ func runStatusCmd(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 	if statusJSON {
-		return writeJSON(out, st)
+		return writeCommandJSON(out, "status", st)
+	}
+	if quiet {
+		return nil
 	}
 
 	notes := buildNotes(st)

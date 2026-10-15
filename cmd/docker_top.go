@@ -16,7 +16,7 @@ var dockerTopJSON bool
 var dockerTopCmd = &cobra.Command{
 	Use:   "top",
 	Short: "Show the largest Docker images and volumes",
-	Args:  cobra.NoArgs,
+	Args:  func(cmd *cobra.Command, args []string) error { return usageArgs("docker top", args) },
 	RunE:  runDockerTop,
 }
 
@@ -24,18 +24,20 @@ var topAliasCmd = &cobra.Command{
 	Use:    "top",
 	Short:  "Show the largest Docker images and volumes",
 	Hidden: true,
-	Args:   cobra.NoArgs,
+	Args:   func(cmd *cobra.Command, args []string) error { return usageArgs("top", args) },
 	RunE:   runDockerTop,
 }
 
 func runDockerTop(cmd *cobra.Command, args []string) error {
 	if dockerTopLimit <= 0 {
-		return fmt.Errorf("docker top: --limit must be greater than zero")
+		return usageError("docker top: --limit must be greater than zero")
 	}
 
 	result, err := docker.GetTop(cmd.Context(), docker.TopOptions{
 		IncludeAnonymousVolumes: dockerTopAll,
 		Limit:                   dockerTopLimit,
+		ImageFilters:            dockerFilterImages,
+		VolumeFilters:           dockerFilterVolumes,
 	})
 	if err != nil {
 		return err
@@ -43,7 +45,10 @@ func runDockerTop(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 	if dockerTopJSON {
-		return writeJSON(out, result)
+		return writeCommandJSON(out, "docker.top", result)
+	}
+	if quiet {
+		return nil
 	}
 
 	style := newOutputStyle(out)
@@ -85,5 +90,7 @@ func init() {
 		command.Flags().BoolVar(&dockerTopAll, "all", false, "Include anonymous volumes")
 		command.Flags().IntVar(&dockerTopLimit, "limit", 10, "Number of images and volumes to show")
 		command.Flags().BoolVar(&dockerTopJSON, "json", false, "Output JSON")
+		command.Flags().StringSliceVar(&dockerFilterImages, "image", nil, "Filter images by reference")
+		command.Flags().StringSliceVar(&dockerFilterVolumes, "volume", nil, "Filter volumes by name")
 	}
 }
