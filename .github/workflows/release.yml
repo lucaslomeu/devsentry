@@ -20,11 +20,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test
-        run: go test ./...
-
-      - name: Vet
-        run: go vet ./...
+      - name: Verify
+        run: ./scripts/verify.sh
 
       - name: Validate GoReleaser configuration
         uses: goreleaser/goreleaser-action@v6

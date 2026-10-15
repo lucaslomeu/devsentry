@@ -23,31 +23,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check installer syntax
-        run: sh -n install.sh uninstall.sh tests/install_test.sh tests/uninstall_test.sh
-
-      - name: Test installer
-        run: sh tests/install_test.sh
-
-      - name: Test uninstaller
-        run: sh tests/uninstall_test.sh
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      - name: Check formatting
-        run: |
-          OUT="$(git ls-files '*.go' | xargs gofmt -l)"
-          if [ -n "$OUT" ]; then
-            echo "The following files are not formatted:"
-            echo "$OUT"
-            exit 1
-          fi
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Test
-        run: go test -cover ./...
+      - name: Verify
+        run: ./scripts/verify.sh

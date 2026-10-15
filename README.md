@@ -60,6 +60,12 @@ Run without installing:
 go run .
 ```
 
+Run the complete local verification pipeline:
+
+```bash
+./scripts/verify.sh
+```
+
 ## Requirements
 
 - Docker CLI for Docker-related commands.
@@ -100,3 +106,5 @@ containers are also eligible. Images used by running containers are always
 preserved.
 
 Terminal colors are always enabled for human-readable output. JSON output remains plain for automation.
+
+Development cycles and the release procedure are defined in `ROADMAP.md`.
