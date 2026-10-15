@@ -21,6 +21,8 @@ type TopItem struct {
 type TopOptions struct {
 	IncludeAnonymousVolumes bool
 	Limit                   int
+	ImageFilters            []string
+	VolumeFilters           []string
 }
 
 type TopResult struct {
@@ -61,7 +63,7 @@ func GetTop(ctx context.Context, opts TopOptions) (TopResult, error) {
 		limit = maxTopItems
 	}
 
-	images, err := topImages(ctx, limit)
+	images, err := topImages(ctx, limit, opts.ImageFilters)
 	if err != nil {
 		return TopResult{}, err
 	}
@@ -77,8 +79,11 @@ func GetTop(ctx context.Context, opts TopOptions) (TopResult, error) {
 	}, nil
 }
 
-func topImages(ctx context.Context, limit int) ([]TopItem, error) {
-	out, err := Run(ctx, 0, "image", "ls", "--format", "{{json .}}")
+func topImages(ctx context.Context, limit int, filters []string) ([]TopItem, error) {
+	args := []string{"image", "ls"}
+	args = appendFilterArgs(args, "reference", filters)
+	args = append(args, "--format", "{{json .}}")
+	out, err := Run(ctx, 0, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +123,10 @@ func topImages(ctx context.Context, limit int) ([]TopItem, error) {
 }
 
 func topVolumes(ctx context.Context, opts TopOptions, limit int) ([]TopItem, error) {
-	out, err := Run(ctx, 0, "volume", "ls", "--format", "{{json .}}")
+	args := []string{"volume", "ls"}
+	args = appendFilterArgs(args, "name", opts.VolumeFilters)
+	args = append(args, "--format", "{{json .}}")
+	out, err := Run(ctx, 0, args...)
 	if err != nil {
 		return nil, err
 	}

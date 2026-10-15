@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "devsentry/clean/v1",
+  "type": "object",
+  "required": ["schema_version", "command", "data"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command": { "const": "clean" },
+    "data": {
+      "type": "object",
+      "required": ["mode", "plan", "applied"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["DRY-RUN", "APPLY"] },
+        "plan": { "type": "object", "additionalProperties": true },
+        "applied": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

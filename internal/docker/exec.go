@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"devsentry/internal/clierr"
 )
 
 const DefaultTimeout = 10 * time.Second
@@ -43,10 +45,10 @@ func run(ctx context.Context, timeout time.Duration, env []string, args ...strin
 	if err := cmd.Run(); err != nil {
 		cmdString := fmt.Sprintf("docker %s", strings.Join(args, " "))
 		if errors.Is(err, exec.ErrNotFound) {
-			return "", fmt.Errorf("docker: not found in PATH (tried: %s)", cmdString)
+			return "", clierr.Wrap(clierr.ErrDockerUnavailable, fmt.Errorf("docker: not found in PATH (tried: %s)", cmdString))
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", fmt.Errorf("docker: command timed out after %s: %s", effectiveTimeout, cmdString)
+			return "", clierr.Wrap(clierr.ErrTimeout, fmt.Errorf("docker: command timed out after %s: %s", effectiveTimeout, cmdString))
 		}
 
 		msg := strings.TrimSpace(stderr.String())
@@ -54,7 +56,7 @@ func run(ctx context.Context, timeout time.Duration, env []string, args ...strin
 			msg = err.Error()
 		}
 		if isDaemonNotRunning(msg) {
-			return "", fmt.Errorf("docker: daemon is not running: %s", cmdString)
+			return "", clierr.Wrap(clierr.ErrDockerUnavailable, fmt.Errorf("docker: daemon is not running: %s", cmdString))
 		}
 
 		return "", fmt.Errorf("docker: failed to run %s: %s", cmdString, msg)

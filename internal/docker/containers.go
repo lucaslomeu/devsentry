@@ -15,6 +15,12 @@ type ContainerInfo struct {
 	Ports  string `json:"ports"`
 }
 
+type ContainerFilters struct {
+	Names    []string
+	Images   []string
+	Statuses []string
+}
+
 type dockerPSRow struct {
 	Names  string `json:"Names"`
 	Image  string `json:"Image"`
@@ -23,7 +29,17 @@ type dockerPSRow struct {
 }
 
 func ListRunningContainers(ctx context.Context) ([]ContainerInfo, error) {
-	output, err := Run(ctx, 0, "ps", "--format", "{{json .}}")
+	return ListRunningContainersWithFilters(ctx, ContainerFilters{})
+}
+
+func ListRunningContainersWithFilters(ctx context.Context, filters ContainerFilters) ([]ContainerInfo, error) {
+	args := []string{"ps"}
+	args = appendFilterArgs(args, "name", filters.Names)
+	args = appendFilterArgs(args, "ancestor", filters.Images)
+	args = appendFilterArgs(args, "status", filters.Statuses)
+	args = append(args, "--format", "{{json .}}")
+
+	output, err := Run(ctx, 0, args...)
 	if err != nil {
 		return nil, err
 	}

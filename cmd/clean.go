@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,8 @@ var cleanContainers bool
 var cleanCache bool
 var cleanAll bool
 var cleanJSON bool
+var cleanOlderThan time.Duration
+var cleanExcludeLabels []string
 
 type cleanOutput struct {
 	Mode    string     `json:"mode"`
@@ -28,7 +31,7 @@ type cleanOutput struct {
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean up Docker resources",
-	Args:  cobra.NoArgs,
+	Args:  func(cmd *cobra.Command, args []string) error { return usageArgs("clean", args) },
 	RunE:  runCleanCmd,
 }
 
@@ -40,11 +43,18 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 	hasScope := cleanImages || cleanContainers || cleanCache
 	selectAll := cleanAll || !hasScope
 	opts := clean.Options{
-		Timeout:    cleanTimeout,
-		Images:     selectAll || cleanImages,
-		Containers: selectAll || cleanContainers,
-		BuildCache: selectAll || cleanCache,
-		All:        cleanAll,
+		Timeout:       cleanTimeout,
+		Images:        selectAll || cleanImages,
+		Containers:    selectAll || cleanContainers,
+		BuildCache:    selectAll || cleanCache,
+		All:           cleanAll,
+		ExcludeLabels: cleanExcludeLabels,
+	}
+	if cleanOlderThan < 0 {
+		return usageError("clean: --older-than must not be negative")
+	}
+	if cleanOlderThan > 0 {
+		opts.Until = time.Now().Add(-cleanOlderThan)
 	}
 	plan, err := clean.BuildPlan(cmd.Context(), opts)
 	if err != nil {
@@ -63,7 +73,13 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 				return err
 			}
 		}
-		return writeJSON(out, cleanOutput{Mode: mode, Plan: plan, Applied: cleanApply})
+		return writeCommandJSON(out, "clean", cleanOutput{Mode: mode, Plan: plan, Applied: cleanApply})
+	}
+	if quiet {
+		if cleanApply {
+			return clean.Apply(cmd.Context(), opts)
+		}
+		return nil
 	}
 
 	style := newOutputStyle(out)
@@ -97,6 +113,9 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 	fmt.Fprintln(out)
+	if len(plan.Filters) > 0 {
+		fmt.Fprintf(out, "Filters: %s\n\n", strings.Join(plan.Filters, " "))
+	}
 
 	if plan.EstimateApprox && plan.EstimatedBytes == 0 {
 		fmt.Fprintln(out, "Estimated reclaim: unknown")
@@ -111,7 +130,7 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 
 	if !cleanApply {
 		fmt.Fprintln(out, style.warning("Dry-run only. Nothing was removed."))
-		fmt.Fprintf(out, "Apply with: devsentry clean %s --apply\n", cleanScopeArgs(cleanAll, cleanImages, cleanContainers, cleanCache))
+		fmt.Fprintf(out, "Apply with: devsentry clean %s --apply\n", cleanCommandArgs())
 		return nil
 	}
 
@@ -131,15 +150,17 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Also clean all images unused after stopped containers are removed")
 	cleanCmd.Flags().BoolVar(&cleanJSON, "json", false, "Output JSON")
 	cleanCmd.Flags().DurationVar(&cleanTimeout, "timeout", 60*time.Second, "Timeout for Docker commands")
+	cleanCmd.Flags().DurationVar(&cleanOlderThan, "older-than", 0, "Only clean resources older than this duration")
+	cleanCmd.Flags().StringSliceVar(&cleanExcludeLabels, "exclude-label", nil, "Exclude resources with a Docker label")
 }
 
 func validateCleanFlags(apply, all, images, containers, cache bool) error {
 	hasIndividualScope := images || containers || cache
 	if all && hasIndividualScope {
-		return fmt.Errorf("clean: --all cannot be combined with --images, --containers, or --cache")
+		return usageError("clean: --all cannot be combined with --images, --containers, or --cache")
 	}
 	if apply && !all && !hasIndividualScope {
-		return fmt.Errorf("clean: --apply requires --images, --containers, --cache, or --all")
+		return usageError("clean: --apply requires --images, --containers, --cache, or --all")
 	}
 	return nil
 }
@@ -163,6 +184,17 @@ func cleanScopeArgs(all, images, containers, cache bool) string {
 		args = append(args, "--images", "--containers", "--cache")
 	}
 	return strings.Join(args, " ")
+}
+
+func cleanCommandArgs() string {
+	args := cleanScopeArgs(cleanAll, cleanImages, cleanContainers, cleanCache)
+	if cleanOlderThan > 0 {
+		args += " --older-than " + cleanOlderThan.String()
+	}
+	for _, label := range cleanExcludeLabels {
+		args += " --exclude-label " + strconv.Quote(label)
+	}
+	return args
 }
 
 func sumImageBytes(items []clean.ImageItem) uint64 {

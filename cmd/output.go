@@ -11,6 +11,12 @@ type outputStyle struct {
 	color bool
 }
 
+type JSONEnvelope struct {
+	SchemaVersion int    `json:"schema_version"`
+	Command       string `json:"command"`
+	Data          any    `json:"data"`
+}
+
 func newOutputStyle(out io.Writer) outputStyle {
 	return outputStyle{color: true}
 }
@@ -95,4 +101,12 @@ func writeJSON(out io.Writer, value any) error {
 	encoder := json.NewEncoder(out)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(value)
+}
+
+func writeCommandJSON(out io.Writer, command string, value any) error {
+	return writeJSON(out, JSONEnvelope{
+		SchemaVersion: 1,
+		Command:       command,
+		Data:          value,
+	})
 }

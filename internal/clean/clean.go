@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"devsentry/internal/clierr"
 	"devsentry/internal/docker"
 	sizeutil "devsentry/internal/size"
 )
@@ -15,11 +16,13 @@ import (
 const defaultCleanTimeout = 60 * time.Second
 
 type Options struct {
-	Timeout    time.Duration
-	Images     bool
-	Containers bool
-	BuildCache bool
-	All        bool
+	Timeout       time.Duration
+	Images        bool
+	Containers    bool
+	BuildCache    bool
+	All           bool
+	Until         time.Time
+	ExcludeLabels []string
 }
 
 type Plan struct {
@@ -30,6 +33,7 @@ type Plan struct {
 	PlannedActions    []string        `json:"planned_actions"`
 	EstimatedBytes    uint64          `json:"estimated_bytes"`
 	EstimateApprox    bool            `json:"estimate_approx"`
+	Filters           []string        `json:"filters"`
 }
 
 type ImageItem struct {
@@ -76,7 +80,7 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 	var imagesTotal uint64
 	if imagesSelected {
 		var err error
-		images, unusedImages, imagesTotal, err = listImageCleanupCandidates(ctx, timeout, opts.All, containersSelected)
+		images, unusedImages, imagesTotal, err = listImageCleanupCandidatesWithFilters(ctx, timeout, opts.All, containersSelected, opts)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -86,7 +90,7 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 	var containersTotal uint64
 	if containersSelected {
 		var err error
-		containers, containersTotal, err = listStoppedContainers(ctx, timeout)
+		containers, containersTotal, err = listStoppedContainersWithFilters(ctx, timeout, opts)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -95,7 +99,7 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 	var buildCache BuildCacheInfo
 	if cacheSelected {
 		var err error
-		buildCache, err = getBuildCacheEstimate(ctx, timeout)
+		buildCache, err = getBuildCacheEstimate(ctx, timeout, opts)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -137,6 +141,7 @@ func BuildPlan(ctx context.Context, opts Options) (Plan, error) {
 		PlannedActions:    plannedActions,
 		EstimatedBytes:    estimated,
 		EstimateApprox:    estimateApprox,
+		Filters:           cleanupFilterArgs(opts),
 	}, nil
 }
 
@@ -146,8 +151,9 @@ func Apply(ctx context.Context, opts Options) error {
 	imagesSelected, containersSelected, cacheSelected := selectedScopes(opts)
 
 	if containersSelected {
-		if _, err := docker.Run(ctx, timeout, "container", "prune", "-f"); err != nil {
-			return err
+		args := append([]string{"container", "prune", "-f"}, cleanupFilterArgs(opts)...)
+		if _, err := docker.Run(ctx, timeout, args...); err != nil {
+			return clierr.Wrap(clierr.ErrMutation, err)
 		}
 	}
 	if imagesSelected {
@@ -155,13 +161,15 @@ func Apply(ctx context.Context, opts Options) error {
 		if opts.All {
 			args = []string{"image", "prune", "-a", "-f"}
 		}
+		args = append(args, cleanupFilterArgs(opts)...)
 		if _, err := docker.Run(ctx, timeout, args...); err != nil {
-			return err
+			return clierr.Wrap(clierr.ErrMutation, err)
 		}
 	}
 	if cacheSelected {
-		if _, err := docker.Run(ctx, timeout, "builder", "prune", "-f"); err != nil {
-			return err
+		args := append([]string{"builder", "prune", "-f"}, cleanupFilterArgs(opts)...)
+		if _, err := docker.Run(ctx, timeout, args...); err != nil {
+			return clierr.Wrap(clierr.ErrMutation, err)
 		}
 	}
 
@@ -176,7 +184,14 @@ func selectedScopes(opts Options) (images, containers, cache bool) {
 }
 
 func listImageCleanupCandidates(ctx context.Context, timeout time.Duration, includeUnused, containersWillBePruned bool) ([]ImageItem, []ImageItem, uint64, error) {
-	out, err := docker.Run(ctx, timeout, "image", "ls", "-a", "--no-trunc", "--format", "{{json .}}")
+	return listImageCleanupCandidatesWithFilters(ctx, timeout, includeUnused, containersWillBePruned, Options{})
+}
+
+func listImageCleanupCandidatesWithFilters(ctx context.Context, timeout time.Duration, includeUnused, containersWillBePruned bool, opts Options) ([]ImageItem, []ImageItem, uint64, error) {
+	args := []string{"image", "ls", "-a", "--no-trunc"}
+	args = append(args, cleanupFilterArgs(opts)...)
+	args = append(args, "--format", "{{json .}}")
+	out, err := docker.Run(ctx, timeout, args...)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -303,7 +318,14 @@ func sortImageItems(items []ImageItem) {
 }
 
 func listStoppedContainers(ctx context.Context, timeout time.Duration) ([]ContainerItem, uint64, error) {
-	out, err := docker.Run(ctx, timeout, "ps", "-a", "--filter", "status=exited", "--filter", "status=dead", "--size", "--format", "{{json .}}")
+	return listStoppedContainersWithFilters(ctx, timeout, Options{})
+}
+
+func listStoppedContainersWithFilters(ctx context.Context, timeout time.Duration, opts Options) ([]ContainerItem, uint64, error) {
+	args := []string{"ps", "-a", "--filter", "status=exited", "--filter", "status=dead", "--size"}
+	args = append(args, cleanupFilterArgs(opts)...)
+	args = append(args, "--format", "{{json .}}")
+	out, err := docker.Run(ctx, timeout, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -340,8 +362,9 @@ func listStoppedContainers(ctx context.Context, timeout time.Duration) ([]Contai
 	return items, total, nil
 }
 
-func getBuildCacheEstimate(ctx context.Context, timeout time.Duration) (BuildCacheInfo, error) {
-	out, err := docker.Run(ctx, timeout, "builder", "prune", "--dry-run", "--force")
+func getBuildCacheEstimate(ctx context.Context, timeout time.Duration, opts Options) (BuildCacheInfo, error) {
+	args := append([]string{"builder", "prune", "--dry-run", "--force"}, cleanupFilterArgs(opts)...)
+	out, err := docker.Run(ctx, timeout, args...)
 	if err == nil {
 		sizeLabel, sizeBytes := parseReclaimedSpace(out)
 		if sizeLabel != "" {
@@ -476,4 +499,15 @@ func normalizeTimeout(timeout time.Duration) time.Duration {
 		return defaultCleanTimeout
 	}
 	return timeout
+}
+
+func cleanupFilterArgs(opts Options) []string {
+	filters := make([]string, 0, len(opts.ExcludeLabels)+1)
+	if !opts.Until.IsZero() {
+		filters = append(filters, "--filter", "until="+opts.Until.UTC().Format(time.RFC3339))
+	}
+	for _, label := range opts.ExcludeLabels {
+		filters = append(filters, "--filter", "label!="+label)
+	}
+	return filters
 }

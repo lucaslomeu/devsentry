@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "devsentry/status/v1",
+  "type": "object",
+  "required": ["schema_version", "command", "data"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command": { "const": "status" },
+    "data": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

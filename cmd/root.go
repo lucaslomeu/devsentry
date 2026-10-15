@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
+	"devsentry/internal/clierr"
 	"github.com/spf13/cobra"
 )
 
@@ -11,13 +13,18 @@ var rootCmd = &cobra.Command{
 	Short:         "Devsentry CLI",
 	Long:          "Devsentry is a command-line interface tool for managing and monitoring development environments.",
 	Version:       Version,
-	Args:          cobra.NoArgs,
+	Args:          func(cmd *cobra.Command, args []string) error { return usageArgs("devsentry", args) },
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	Run:           runRootCmd,
 }
 
+var quiet bool
+
 func runRootCmd(cmd *cobra.Command, args []string) {
+	if quiet {
+		return
+	}
 	out := cmd.OutOrStdout()
 	style := newOutputStyle(out)
 	fmt.Fprintln(out, style.title("Devsentry"))
@@ -33,6 +40,10 @@ func runRootCmd(cmd *cobra.Command, args []string) {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		return clierr.Wrap(clierr.ErrUsage, err)
+	})
+	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Suppress successful human-readable output")
 	rootCmd.SetVersionTemplate("devsentry version: {{.Version}}\n")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(dockerCmd)
@@ -45,5 +56,12 @@ func init() {
 }
 
 func Execute() error {
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "unknown command") {
+		return clierr.Wrap(clierr.ErrUsage, err)
+	}
+	return err
 }

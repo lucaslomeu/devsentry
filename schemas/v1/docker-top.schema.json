@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "devsentry/docker-top/v1",
+  "type": "object",
+  "required": ["schema_version", "command", "data"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "command": { "const": "docker.top" },
+    "data": {
+      "type": "object",
+      "required": ["images", "volumes"],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const fakeDockerScript = `#!/bin/sh
@@ -179,6 +180,22 @@ func TestApplyExecutesOnlySelectedScopes(t *testing.T) {
 				t.Fatalf("unexpected commands: %#v", commands)
 			}
 		})
+	}
+}
+
+func TestCleanupFilterArgsAreStable(t *testing.T) {
+	until := time.Date(2026, 10, 15, 12, 30, 0, 0, time.FixedZone("UTC-3", -3*60*60))
+	got := cleanupFilterArgs(Options{
+		Until:         until,
+		ExcludeLabels: []string{"keep=true", "team=platform"},
+	})
+	want := []string{
+		"--filter", "until=2026-10-15T15:30:00Z",
+		"--filter", "label!=keep=true",
+		"--filter", "label!=team=platform",
+	}
+	if !strings.EqualFold(strings.Join(got, "\x00"), strings.Join(want, "\x00")) {
+		t.Fatalf("unexpected cleanup filters: %#v", got)
 	}
 }
 

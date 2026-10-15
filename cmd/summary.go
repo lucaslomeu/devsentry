@@ -12,7 +12,7 @@ import (
 var dockerSummaryCmd = &cobra.Command{
 	Use:   "summary",
 	Short: "Show a summary of Docker resources",
-	Args:  cobra.NoArgs,
+	Args:  func(cmd *cobra.Command, args []string) error { return usageArgs("docker summary", args) },
 	RunE:  runDockerSummary,
 }
 
@@ -20,7 +20,7 @@ var summaryAliasCmd = &cobra.Command{
 	Use:    "summary",
 	Short:  "Show a summary of Docker resources",
 	Hidden: true,
-	Args:   cobra.NoArgs,
+	Args:   func(cmd *cobra.Command, args []string) error { return usageArgs("summary", args) },
 	RunE:   runDockerSummary,
 }
 
@@ -34,7 +34,10 @@ func runDockerSummary(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 	if dockerSummaryJSON {
-		return writeJSON(out, summary)
+		return writeCommandJSON(out, "docker", summary)
+	}
+	if quiet {
+		return nil
 	}
 
 	style := newOutputStyle(out)

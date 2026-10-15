@@ -12,7 +12,7 @@ import (
 var dockerLsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List running Docker containers",
-	Args:  cobra.NoArgs,
+	Args:  func(cmd *cobra.Command, args []string) error { return usageArgs("docker ls", args) },
 	RunE:  runDockerLs,
 }
 
@@ -20,21 +20,28 @@ var lsAliasCmd = &cobra.Command{
 	Use:    "ls",
 	Short:  "List running Docker containers",
 	Hidden: true,
-	Args:   cobra.NoArgs,
+	Args:   func(cmd *cobra.Command, args []string) error { return usageArgs("ls", args) },
 	RunE:   runDockerLs,
 }
 
 var dockerLsJSON bool
 
 func runDockerLs(cmd *cobra.Command, args []string) error {
-	containers, err := docker.ListRunningContainers(cmd.Context())
+	containers, err := docker.ListRunningContainersWithFilters(cmd.Context(), docker.ContainerFilters{
+		Names:    dockerFilterNames,
+		Images:   dockerFilterImages,
+		Statuses: dockerFilterStatuses,
+	})
 	if err != nil {
 		return err
 	}
 
 	out := cmd.OutOrStdout()
 	if dockerLsJSON {
-		return writeJSON(out, containers)
+		return writeCommandJSON(out, "docker.list", containers)
+	}
+	if quiet {
+		return nil
 	}
 
 	style := newOutputStyle(out)
@@ -54,4 +61,9 @@ func runDockerLs(cmd *cobra.Command, args []string) error {
 func init() {
 	dockerLsCmd.Flags().BoolVar(&dockerLsJSON, "json", false, "Output JSON")
 	lsAliasCmd.Flags().BoolVar(&dockerLsJSON, "json", false, "Output JSON")
+	for _, command := range []*cobra.Command{dockerLsCmd, lsAliasCmd} {
+		command.Flags().StringSliceVar(&dockerFilterNames, "name", nil, "Filter containers by name")
+		command.Flags().StringSliceVar(&dockerFilterImages, "image", nil, "Filter containers by image")
+		command.Flags().StringSliceVar(&dockerFilterStatuses, "status", nil, "Filter containers by status")
+	}
 }
