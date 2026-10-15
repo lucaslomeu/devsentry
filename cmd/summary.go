@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"devsentry/internal/docker"
 
@@ -11,8 +12,19 @@ import (
 var dockerSummaryCmd = &cobra.Command{
 	Use:   "summary",
 	Short: "Show a summary of Docker resources",
+	Args:  cobra.NoArgs,
 	RunE:  runDockerSummary,
 }
+
+var summaryAliasCmd = &cobra.Command{
+	Use:    "summary",
+	Short:  "Show a summary of Docker resources",
+	Hidden: true,
+	Args:   cobra.NoArgs,
+	RunE:   runDockerSummary,
+}
+
+var dockerSummaryJSON bool
 
 func runDockerSummary(cmd *cobra.Command, args []string) error {
 	summary, err := docker.GetSummary(cmd.Context())
@@ -21,29 +33,44 @@ func runDockerSummary(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintln(out, "Devsentry - Docker Summary")
+	if dockerSummaryJSON {
+		return writeJSON(out, summary)
+	}
+
+	style := newOutputStyle(out)
+	fmt.Fprintln(out, style.title("Devsentry - Docker Summary"))
+	fmt.Fprintln(out, style.muted(strings.Repeat("-", 32)))
 	fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Images:")
-	fmt.Fprintf(out, "  Total: %d\n", summary.Images)
-	fmt.Fprintf(out, "  Total Size: %s\n", normalizeSize(summary.ImagesSize))
+	fmt.Fprintln(out, style.section("Images"))
+	fmt.Fprintf(out, "  Total: %s\n", style.info(fmt.Sprintf("%d", summary.Images)))
+	fmt.Fprintf(out, "  Total Size: %s\n", style.info(normalizeSize(summary.ImagesSize)))
 	fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Containers:")
-	fmt.Fprintf(out, "  Running: %d\n", summary.ContainersRunning)
-	fmt.Fprintf(out, "  Stopped: %d\n", summary.ContainersStopped)
+	fmt.Fprintln(out, style.section("Containers"))
+	fmt.Fprintf(out, "  Running: %s\n", style.success(fmt.Sprintf("%d", summary.ContainersRunning)))
+	stoppedStyle := style.info
+	if summary.ContainersStopped > 0 {
+		stoppedStyle = style.warning
+	}
+	fmt.Fprintf(out, "  Stopped: %s\n", stoppedStyle(fmt.Sprintf("%d", summary.ContainersStopped)))
 	fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Volumes:")
-	fmt.Fprintf(out, "  Total: %d\n", summary.Volumes)
-	fmt.Fprintf(out, "  Total Size: %s\n", normalizeSize(summary.VolumesSize))
+	fmt.Fprintln(out, style.section("Volumes"))
+	fmt.Fprintf(out, "  Total: %s\n", style.info(fmt.Sprintf("%d", summary.Volumes)))
+	fmt.Fprintf(out, "  Total Size: %s\n", style.info(normalizeSize(summary.VolumesSize)))
 	fmt.Fprintln(out)
 
-	fmt.Fprintln(out, "Build Cache:")
-	fmt.Fprintf(out, "  Total: %d\n", summary.BuildCache)
-	fmt.Fprintf(out, "  Total Size: %s\n", normalizeSize(summary.BuildCacheSize))
+	fmt.Fprintln(out, style.section("Build Cache"))
+	fmt.Fprintf(out, "  Total: %s\n", style.info(fmt.Sprintf("%d", summary.BuildCache)))
+	fmt.Fprintf(out, "  Total Size: %s\n", style.info(normalizeSize(summary.BuildCacheSize)))
 
 	return nil
+}
+
+func init() {
+	dockerSummaryCmd.Flags().BoolVar(&dockerSummaryJSON, "json", false, "Output JSON")
+	summaryAliasCmd.Flags().BoolVar(&dockerSummaryJSON, "json", false, "Output JSON")
 }
 
 func normalizeSize(size string) string {
