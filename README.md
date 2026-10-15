@@ -14,6 +14,20 @@ The installer detects Apple Silicon or Intel, verifies the release checksum, and
 installs `devsentry` in `/usr/local/bin`. Administrator permission may be
 requested when that directory is not writable.
 
+Install with Homebrew:
+
+```bash
+brew install --cask lucaslomeu/tap/devsentry
+devsentry version
+```
+
+Upgrade or remove the Homebrew installation:
+
+```bash
+brew upgrade --cask devsentry
+brew uninstall --cask devsentry
+```
+
 Install in a custom directory without `sudo`:
 
 ```bash
@@ -25,7 +39,7 @@ Install a specific version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lucaslomeu/devsentry/main/install.sh | \
-  DEVSENTRY_VERSION=v0.3.0 sh
+  DEVSENTRY_VERSION=v1.0.0 sh
 ```
 
 Verify the installation:
@@ -63,7 +77,7 @@ go run .
 ## Requirements
 
 - Docker CLI for Docker-related commands.
-- macOS for `status` (Linux/Windows support planned).
+- macOS for `status`.
 
 ## Commands
 
@@ -81,6 +95,8 @@ Docker details are available without memorizing subcommands:
 devsentry docker --list
 devsentry docker --top --limit 5
 devsentry docker --top --all
+devsentry docker --list --name api --status running
+devsentry docker --top --image 'postgres:*' --volume data
 ```
 
 `devsentry status` remains available as an advanced macOS diagnostic command.
@@ -91,6 +107,7 @@ Informational commands support `--json`: `docker`, `clean`, and `status`.
 
 ```bash
 devsentry clean --images --cache --apply
+devsentry clean --all --older-than 168h --exclude-label keep=true
 ```
 
 The default image cleanup only removes dangling images. `--all` additionally
@@ -100,3 +117,12 @@ containers are also eligible. Images used by running containers are always
 preserved.
 
 Terminal colors are always enabled for human-readable output. JSON output remains plain for automation.
+
+Automation users can rely on versioned JSON envelopes, stable exit codes, and
+`--quiet`. See [CLI compatibility](CLI_COMPATIBILITY.md) and
+[v1 migration notes](MIGRATING_TO_V1.md).
+
+## Release artifacts
+
+v1.0.0 publishes macOS `amd64` and `arm64` archives with SHA-256 checksums.
+Linux and Windows are not supported by this release.
