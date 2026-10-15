@@ -12,6 +12,16 @@
 # GoReleaser
 /dist/
 
+# Local planning and release notes
+/docs/
+/release_tutorial.md
+/todo.md
+
+# Local logs and environment files
+*.log
+.env
+.env.*
+
 # OS
 .DS_Store
 

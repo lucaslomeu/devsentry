@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"devsentry/internal/clean"
+	sizeutil "devsentry/internal/size"
 
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,13 @@ var cleanImages bool
 var cleanContainers bool
 var cleanCache bool
 var cleanAll bool
+var cleanJSON bool
+
+type cleanOutput struct {
+	Mode    string     `json:"mode"`
+	Plan    clean.Plan `json:"plan"`
+	Applied bool       `json:"applied"`
+}
 
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
@@ -49,7 +57,21 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 		mode = "APPLY"
 	}
 
-	fmt.Fprintf(out, "Docker cleanup (%s)\n", mode)
+	if cleanJSON {
+		if cleanApply {
+			if err := clean.Apply(cmd.Context(), opts); err != nil {
+				return err
+			}
+		}
+		return writeJSON(out, cleanOutput{Mode: mode, Plan: plan, Applied: cleanApply})
+	}
+
+	style := newOutputStyle(out)
+	modeLabel := style.warning(mode)
+	if cleanApply {
+		modeLabel = style.success(mode)
+	}
+	fmt.Fprintf(out, "%s\n", style.title(fmt.Sprintf("Docker cleanup (%s)", modeLabel)))
 
 	if opts.Images {
 		fmt.Fprintf(out, "  Dangling images:    %d (%s)\n", len(plan.DanglingImages), formatBytes(sumImageBytes(plan.DanglingImages)))
@@ -83,11 +105,12 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 		if plan.EstimateApprox {
 			prefix = "~"
 		}
-		fmt.Fprintf(out, "Estimated reclaim: %s%s\n", prefix, formatBytes(plan.EstimatedBytes))
+		reclaim := fmt.Sprintf("%s%s", prefix, formatBytes(plan.EstimatedBytes))
+		fmt.Fprintf(out, "Estimated reclaim: %s\n", style.success(reclaim))
 	}
 
 	if !cleanApply {
-		fmt.Fprintln(out, "Dry-run only. Nothing was removed.")
+		fmt.Fprintln(out, style.warning("Dry-run only. Nothing was removed."))
 		fmt.Fprintf(out, "Apply with: devsentry clean %s --apply\n", cleanScopeArgs(cleanAll, cleanImages, cleanContainers, cleanCache))
 		return nil
 	}
@@ -96,7 +119,7 @@ func runCleanCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintln(out, "Cleanup completed.")
+	fmt.Fprintln(out, style.success("Cleanup completed."))
 	return nil
 }
 
@@ -106,6 +129,7 @@ func init() {
 	cleanCmd.Flags().BoolVar(&cleanContainers, "containers", false, "Clean stopped containers")
 	cleanCmd.Flags().BoolVar(&cleanCache, "cache", false, "Clean the Docker build cache")
 	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Also clean all images unused after stopped containers are removed")
+	cleanCmd.Flags().BoolVar(&cleanJSON, "json", false, "Output JSON")
 	cleanCmd.Flags().DurationVar(&cleanTimeout, "timeout", 60*time.Second, "Timeout for Docker commands")
 }
 
@@ -121,7 +145,7 @@ func validateCleanFlags(apply, all, images, containers, cache bool) error {
 }
 
 func cleanScopeArgs(all, images, containers, cache bool) string {
-	if all || (!images && !containers && !cache) {
+	if all {
 		return "--all"
 	}
 
@@ -134,6 +158,9 @@ func cleanScopeArgs(all, images, containers, cache bool) string {
 	}
 	if cache {
 		args = append(args, "--cache")
+	}
+	if len(args) == 0 {
+		args = append(args, "--images", "--containers", "--cache")
 	}
 	return strings.Join(args, " ")
 }
@@ -155,23 +182,5 @@ func sumContainerBytes(items []clean.ContainerItem) uint64 {
 }
 
 func formatBytes(bytes uint64) string {
-	const (
-		kb = 1024
-		mb = 1024 * kb
-		gb = 1024 * mb
-		tb = 1024 * gb
-	)
-
-	switch {
-	case bytes >= tb:
-		return fmt.Sprintf("%.1fTiB", float64(bytes)/float64(tb))
-	case bytes >= gb:
-		return fmt.Sprintf("%.1fGiB", float64(bytes)/float64(gb))
-	case bytes >= mb:
-		return fmt.Sprintf("%.1fMiB", float64(bytes)/float64(mb))
-	case bytes >= kb:
-		return fmt.Sprintf("%.1fKiB", float64(bytes)/float64(kb))
-	default:
-		return fmt.Sprintf("%dB", bytes)
-	}
+	return sizeutil.Format(bytes)
 }

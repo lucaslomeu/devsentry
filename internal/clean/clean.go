@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"devsentry/internal/docker"
+	sizeutil "devsentry/internal/size"
 )
 
 const defaultCleanTimeout = 60 * time.Second
@@ -23,34 +23,34 @@ type Options struct {
 }
 
 type Plan struct {
-	DanglingImages    []ImageItem
-	UnusedImages      []ImageItem
-	StoppedContainers []ContainerItem
-	BuildCache        BuildCacheInfo
-	PlannedActions    []string
-	EstimatedBytes    uint64
-	EstimateApprox    bool
+	DanglingImages    []ImageItem     `json:"dangling_images"`
+	UnusedImages      []ImageItem     `json:"unused_images"`
+	StoppedContainers []ContainerItem `json:"stopped_containers"`
+	BuildCache        BuildCacheInfo  `json:"build_cache"`
+	PlannedActions    []string        `json:"planned_actions"`
+	EstimatedBytes    uint64          `json:"estimated_bytes"`
+	EstimateApprox    bool            `json:"estimate_approx"`
 }
 
 type ImageItem struct {
-	ID        string
-	Name      string
-	SizeBytes uint64
-	SizeLabel string
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	SizeBytes uint64 `json:"size_bytes"`
+	SizeLabel string `json:"size"`
 }
 
 type ContainerItem struct {
-	ID        string
-	Name      string
-	SizeBytes uint64
-	SizeLabel string
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	SizeBytes uint64 `json:"size_bytes"`
+	SizeLabel string `json:"size"`
 }
 
 type BuildCacheInfo struct {
-	SizeBytes uint64
-	SizeLabel string
-	Available bool
-	Approx    bool
+	SizeBytes uint64 `json:"size_bytes"`
+	SizeLabel string `json:"size"`
+	Available bool   `json:"available"`
+	Approx    bool   `json:"approx"`
 }
 
 type imageRow struct {
@@ -441,59 +441,15 @@ func parseReclaimedSpace(output string) (string, uint64) {
 }
 
 func parseSizeToBytes(size string) (uint64, error) {
-	trimmed := strings.TrimSpace(size)
-	if trimmed == "" {
-		return 0, nil
-	}
-
-	trimmed = strings.ReplaceAll(trimmed, " ", "")
-
-	value, unit := splitSize(trimmed)
-	if value == "" {
-		return 0, fmt.Errorf("invalid size: %q", size)
-	}
-
-	num, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid size: %q", size)
-	}
-
-	multiplier := sizeUnitMultiplier(unit)
-	if multiplier == 0 {
-		return 0, fmt.Errorf("unknown size unit: %q", unit)
-	}
-
-	return uint64(num * multiplier), nil
+	return sizeutil.Parse(size)
 }
 
 func splitSize(value string) (string, string) {
-	for i, r := range value {
-		if r < '0' || r > '9' {
-			if r == '.' {
-				continue
-			}
-			return value[:i], value[i:]
-		}
-	}
-	return value, ""
+	return sizeutil.Split(value)
 }
 
 func sizeUnitMultiplier(unit string) float64 {
-	unit = strings.ToLower(strings.TrimSpace(unit))
-	switch unit {
-	case "b", "bytes", "":
-		return 1
-	case "kb", "kib":
-		return 1024
-	case "mb", "mib":
-		return 1024 * 1024
-	case "gb", "gib":
-		return 1024 * 1024 * 1024
-	case "tb", "tib":
-		return 1024 * 1024 * 1024 * 1024
-	default:
-		return 0
-	}
+	return sizeutil.UnitMultiplier(unit)
 }
 
 func shortenID(id string) string {

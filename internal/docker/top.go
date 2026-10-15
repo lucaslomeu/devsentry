@@ -5,25 +5,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
+
+	sizeutil "devsentry/internal/size"
 )
 
 const maxTopItems = 10
 
 type TopItem struct {
-	Name      string
-	SizeBytes uint64
-	SizeLabel string
+	Name      string `json:"name"`
+	SizeBytes uint64 `json:"size_bytes"`
+	SizeLabel string `json:"size"`
 }
 
 type TopOptions struct {
 	IncludeAnonymousVolumes bool
+	Limit                   int
 }
 
 type TopResult struct {
-	Images  []TopItem
-	Volumes []TopItem
+	Images  []TopItem `json:"images"`
+	Volumes []TopItem `json:"volumes"`
 }
 
 type dockerImageRow struct {
@@ -54,12 +56,17 @@ type dockerSystemDFRow struct {
 
 // GetTop returns the top images and volumes by size.
 func GetTop(ctx context.Context, opts TopOptions) (TopResult, error) {
-	images, err := topImages(ctx)
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = maxTopItems
+	}
+
+	images, err := topImages(ctx, limit)
 	if err != nil {
 		return TopResult{}, err
 	}
 
-	volumes, err := topVolumes(ctx, opts)
+	volumes, err := topVolumes(ctx, opts, limit)
 	if err != nil {
 		return TopResult{}, err
 	}
@@ -70,7 +77,7 @@ func GetTop(ctx context.Context, opts TopOptions) (TopResult, error) {
 	}, nil
 }
 
-func topImages(ctx context.Context) ([]TopItem, error) {
+func topImages(ctx context.Context, limit int) ([]TopItem, error) {
 	out, err := Run(ctx, 0, "image", "ls", "--format", "{{json .}}")
 	if err != nil {
 		return nil, err
@@ -103,14 +110,14 @@ func topImages(ctx context.Context) ([]TopItem, error) {
 		})
 	}
 	sortTopItems(items)
-	if len(items) > maxTopItems {
-		items = items[:maxTopItems]
+	if len(items) > limit {
+		items = items[:limit]
 	}
 
 	return items, nil
 }
 
-func topVolumes(ctx context.Context, opts TopOptions) ([]TopItem, error) {
+func topVolumes(ctx context.Context, opts TopOptions, limit int) ([]TopItem, error) {
 	out, err := Run(ctx, 0, "volume", "ls", "--format", "{{json .}}")
 	if err != nil {
 		return nil, err
@@ -148,7 +155,7 @@ func topVolumes(ctx context.Context, opts TopOptions) ([]TopItem, error) {
 	inspectOut, err := Run(ctx, 0, inspectArgs...)
 	if err != nil {
 		if isUnsupportedVolumeSizeFlag(err) {
-			return topVolumesFromSystemDF(ctx, volumeNames, opts)
+			return topVolumesFromSystemDF(ctx, volumeNames, opts, limit)
 		}
 		return nil, err
 	}
@@ -183,8 +190,8 @@ func topVolumes(ctx context.Context, opts TopOptions) ([]TopItem, error) {
 		})
 	}
 	sortTopItems(items)
-	if len(items) > maxTopItems {
-		items = items[:maxTopItems]
+	if len(items) > limit {
+		items = items[:limit]
 	}
 
 	return items, nil
@@ -215,81 +222,19 @@ func sortTopItems(items []TopItem) {
 }
 
 func parseSizeToBytes(size string) (uint64, error) {
-	trimmed := strings.TrimSpace(size)
-	if trimmed == "" {
-		return 0, nil
-	}
-
-	trimmed = strings.ReplaceAll(trimmed, " ", "")
-
-	value, unit := splitSize(trimmed)
-	if value == "" {
-		return 0, fmt.Errorf("invalid size: %q", size)
-	}
-
-	num, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid size: %q", size)
-	}
-
-	multiplier := sizeUnitMultiplier(unit)
-	if multiplier == 0 {
-		return 0, fmt.Errorf("unknown size unit: %q", unit)
-	}
-
-	return uint64(num * multiplier), nil
+	return sizeutil.Parse(size)
 }
 
 func splitSize(value string) (string, string) {
-	for i, r := range value {
-		if r < '0' || r > '9' {
-			if r == '.' {
-				continue
-			}
-			return value[:i], value[i:]
-		}
-	}
-	return value, ""
+	return sizeutil.Split(value)
 }
 
 func sizeUnitMultiplier(unit string) float64 {
-	unit = strings.ToLower(strings.TrimSpace(unit))
-	switch unit {
-	case "b", "bytes", "":
-		return 1
-	case "kb", "kib":
-		return 1024
-	case "mb", "mib":
-		return 1024 * 1024
-	case "gb", "gib":
-		return 1024 * 1024 * 1024
-	case "tb", "tib":
-		return 1024 * 1024 * 1024 * 1024
-	default:
-		return 0
-	}
+	return sizeutil.UnitMultiplier(unit)
 }
 
 func formatBytes(bytes uint64) string {
-	const (
-		kb = 1024
-		mb = 1024 * kb
-		gb = 1024 * mb
-		tb = 1024 * gb
-	)
-
-	switch {
-	case bytes >= tb:
-		return fmt.Sprintf("%.1fTiB", float64(bytes)/float64(tb))
-	case bytes >= gb:
-		return fmt.Sprintf("%.1fGiB", float64(bytes)/float64(gb))
-	case bytes >= mb:
-		return fmt.Sprintf("%.1fMiB", float64(bytes)/float64(mb))
-	case bytes >= kb:
-		return fmt.Sprintf("%.1fKiB", float64(bytes)/float64(kb))
-	default:
-		return fmt.Sprintf("%dB", bytes)
-	}
+	return sizeutil.Format(bytes)
 }
 
 func filterNamedVolumes(names []string) []string {
@@ -329,7 +274,7 @@ func isUnsupportedVolumeSizeFlag(err error) bool {
 	return strings.Contains(msg, "unknown flag: --size") || strings.Contains(msg, "unknown flag --size")
 }
 
-func topVolumesFromSystemDF(ctx context.Context, volumeNames []string, opts TopOptions) ([]TopItem, error) {
+func topVolumesFromSystemDF(ctx context.Context, volumeNames []string, opts TopOptions, limit int) ([]TopItem, error) {
 	out, err := Run(ctx, 0, "system", "df", "-v", "--format", "{{json .}}")
 	if err != nil {
 		return nil, err
@@ -382,8 +327,8 @@ func topVolumesFromSystemDF(ctx context.Context, volumeNames []string, opts TopO
 		})
 	}
 	sortTopItems(items)
-	if len(items) > maxTopItems {
-		items = items[:maxTopItems]
+	if len(items) > limit {
+		items = items[:limit]
 	}
 
 	return items, nil

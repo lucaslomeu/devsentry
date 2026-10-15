@@ -9,10 +9,10 @@ import (
 )
 
 type ContainerInfo struct {
-	Name   string
-	Image  string
-	Status string
-	Ports  string
+	Name   string `json:"name"`
+	Image  string `json:"image"`
+	Status string `json:"status"`
+	Ports  string `json:"ports"`
 }
 
 type dockerPSRow struct {
