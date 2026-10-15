@@ -35,6 +35,14 @@ devsentry version
 devsentry --help
 ```
 
+Uninstall from the default directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lucaslomeu/devsentry/main/uninstall.sh | sh
+```
+
+For a custom directory, set `DEVSENTRY_INSTALL_DIR` in the same way as the installer.
+
 Release binaries can also be downloaded manually from
 [GitHub Releases](https://github.com/lucaslomeu/devsentry/releases).
 
@@ -59,16 +67,25 @@ go run .
 
 ## Commands
 
-- `devsentry` — show a welcome message.
-- `devsentry version` — show CLI version.
-- `devsentry docker ls` — list running containers.
-- `devsentry docker summary` — show Docker totals.
-- `devsentry docker top` — top images and volumes by size (`--all` includes anonymous volumes).
-- `devsentry clean` — preview cleanup of dangling images, stopped containers, and build cache.
-- `devsentry clean --images|--containers|--cache` — preview selected cleanup scopes.
-- `devsentry clean --all` — preview removal of stopped containers, build cache, and all images unused afterward.
-- `devsentry clean --all --apply` — execute the aggressive cleanup previewed by `--all`.
-- `devsentry status` — show local environment status.
+| Command | Description |
+| --- | --- |
+| `devsentry` | Show a welcome message. |
+| `devsentry --version` | Show the CLI version. |
+| `devsentry version` | Show the CLI version. |
+| `devsentry docker` | Show a Docker overview. |
+| `devsentry clean` | Preview cleanup of dangling images, stopped containers, and build cache. |
+
+Docker details are available without memorizing subcommands:
+
+```bash
+devsentry docker --list
+devsentry docker --top --limit 5
+devsentry docker --top --all
+```
+
+`devsentry status` remains available as an advanced macOS diagnostic command.
+
+Informational commands support `--json`: `docker`, `clean`, and `status`.
 
 `clean` never removes resources unless `--apply` is combined with an explicit scope. Multiple scopes can be selected, for example:
 
@@ -81,3 +98,5 @@ removes tagged images that are not used by a running container. Because stopped
 containers are removed first in this mode, images referenced only by those
 containers are also eligible. Images used by running containers are always
 preserved.
+
+Terminal colors are always enabled for human-readable output. JSON output remains plain for automation.
