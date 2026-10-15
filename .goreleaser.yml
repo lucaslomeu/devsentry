@@ -25,20 +25,6 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-homebrew_casks:
-  - name: devsentry
-    binaries:
-      - devsentry
-    repository:
-      owner: lucaslomeu
-      name: homebrew-tap
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    directory: Casks
-    homepage: "https://github.com/lucaslomeu/devsentry"
-    description: "CLI to inspect Docker resources and macOS environment status"
-    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
-    skip_upload: auto
-
 release:
   prerelease: auto
 

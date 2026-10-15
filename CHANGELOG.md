@@ -9,7 +9,6 @@
 - Added versioned JSON envelopes and schemas.
 - Added stable automation exit codes and `--quiet`.
 - Added release smoke tests for macOS `amd64` and `arm64` artifacts.
-- Added Homebrew Cask publishing through the project tap.
 
 ### Changed
 

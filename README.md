@@ -14,20 +14,6 @@ The installer detects Apple Silicon or Intel, verifies the release checksum, and
 installs `devsentry` in `/usr/local/bin`. Administrator permission may be
 requested when that directory is not writable.
 
-Install with Homebrew:
-
-```bash
-brew install --cask lucaslomeu/tap/devsentry
-devsentry version
-```
-
-Upgrade or remove the Homebrew installation:
-
-```bash
-brew upgrade --cask devsentry
-brew uninstall --cask devsentry
-```
-
 Install in a custom directory without `sudo`:
 
 ```bash

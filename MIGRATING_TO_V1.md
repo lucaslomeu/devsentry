@@ -2,13 +2,8 @@
 
 ## Installation
 
-Homebrew is the recommended installation path:
-
-```bash
-brew install --cask lucaslomeu/tap/devsentry
-```
-
-The curl installer remains available for pinned release archives.
+The curl installer remains available for pinned release archives. Package-manager
+distribution will be configured after v1.0.0.
 
 ## Automation
 
