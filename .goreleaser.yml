@@ -27,4 +27,21 @@ release:
   prerelease: auto
 
 changelog:
-  disable: true
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat(\([[:alnum:]-]+\))?!?:'
+      order: 0
+    - title: Fixes
+      regexp: '^fix(\([[:alnum:]-]+\))?!?:'
+      order: 1
+    - title: Refactors
+      regexp: '^refactor(\([[:alnum:]-]+\))?!?:'
+      order: 2
+    - title: Other Changes
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
