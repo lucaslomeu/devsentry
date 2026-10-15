@@ -13,6 +13,7 @@ var Version = "dev"
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show the devsentry version",
+	Args:  cobra.NoArgs,
 	Run:   runVersionCmd,
 }
 
